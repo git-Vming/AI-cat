@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>阿七</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 宠物本体（占位图，阶段 8 替换为动画帧） -->
+  <div id="pet" class="pet"></div>
+
+  <!-- 点击宠物弹出的小卡片：阶段 2 含上工/下工与实时状态 -->
+  <div id="card" class="card hidden">
+    <div class="card-title">🐱 <span id="name">阿七</span> · Lv.<span id="lv">1</span></div>
+    <!-- 经验条：紧贴标题（阿七 · Lv.N）下方；固定 expPerLevel(=80) EXP 升一级；已获得部分为绿色 -->
+    <div class="card-exp">
+      <div class="exp-track"><div class="exp-fill" id="exp-fill"></div></div>
+      <span class="exp-label" id="exp-text">0.0 / 80</span>
+    </div>
+    <div class="card-state" id="state">🔴 休息中</div>
+    <div class="card-stats" id="stats"></div>
+    <button class="card-btn primary" id="btn-main">上工</button>
+    <button class="card-btn ghost" id="btn-hide">隐藏阿七</button>
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

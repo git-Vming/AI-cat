@@ -1,0 +1,109 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 180px;
+  height: 200px;
+  background: transparent;   /* 桌面宠物必须透明 */
+  overflow: hidden;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  user-select: none;
+  /* 阶段 2 二次复查：窗口整体保持可交互（默认），不依赖 CSS 命中切换，
+     避免透明区吞掉 mouseup/mousemove 导致“看着能点其实丢了事件”。
+     代价：窗口四周约 15~25px 透明留白会拦一下桌面点击（非验收项，已与 PM 对齐）。 */
+}
+
+/* 宠物本体：正常可交互元素（不挂 -webkit-app-region 拖拽区，
+   否则 OS 会吃掉 mouseup/click，导致“单击弹卡”失效）。
+   拖动改由 app.js 在 JS 里用 setPosition 实现，并区分“拖动/单击”。 */
+.pet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 150px;
+  height: 150px;
+  background-image: url('../assets/pet/placeholder-cat.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: grab;
+  transition: transform 0.15s ease;
+  touch-action: none;            /* 禁止浏览器默认手势，事件全交给我们处理 */
+  -webkit-user-drag: none;       /* 禁止元素级拖拽（图片拖影） */
+}
+.pet:active { cursor: grabbing; }
+.pet:hover { transform: translate(-50%, -50%) scale(1.05); }
+
+/* 点击弹出的小卡片（阶段 2：含上工/下工 + 实时状态 + 经验条）
+   注意：窗口仅 200px 高，卡片贴底(bottom:5)且整体需 ≤ ~194px，否则会顶出窗口被裁切。
+   单击卡片非按钮区域即收起卡片、回到宠物界面（见 app.js）。 */
+.card {
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  transform: translateX(-50%);
+  width: 168px;
+  padding: 7px 10px;
+  background: rgba(24, 24, 28, 0.92);
+  color: #f2f2f2;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  cursor: default;
+}
+.card.hidden { display: none; }
+.card-title { font-weight: 700; margin-bottom: 2px; }
+/* 经验条：紧贴标题下方；固定 expPerLevel(=80) EXP 升一级；已获得部分为绿色 */
+.card-exp { display: flex; align-items: center; gap: 6px; margin: 1px 0 5px; }
+.exp-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.exp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #5ee08a, #22c55e);   /* 已获得经验 = 绿色 */
+  transition: width 0.3s ease;
+}
+.exp-label { font-size: 10px; color: #9fd8b0; white-space: nowrap; }
+
+.card-state { font-weight: 600; margin-bottom: 4px; color: #ffd479; }
+
+.card-stats { color: #d6d6dc; margin-bottom: 5px; line-height: 1.35; font-size: 11px; text-align: left; }
+.card-stats:empty { display: none; }
+.card-stats b { color: #ffffff; }
+.card-btn {
+  width: 100%;
+  padding: 4px 0;
+  margin-top: 3px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.card-btn.primary { background: #ff9f43; color: #1b1b1f; }
+.card-btn.primary:hover { background: #ffb866; }
+.card-btn.ghost {
+  background: transparent;
+  color: #b9b9c0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.card-btn.ghost:hover { background: rgba(255, 255, 255, 0.08); }
+
+.toast {
+  margin-top: 5px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: #1b1b1f;
+  background: #ffe08a;
+  border-radius: 6px;
+  animation: pop 0.2s ease;
+}
+.toast.hidden { display: none; }
+@keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }

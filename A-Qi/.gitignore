@@ -1,0 +1,9 @@
+node_modules/
+# 运行时生成的数据（可由代码重新初始化，不需纳入版本管理）
+data/*.json
+WorkRecords/*
+!WorkRecords/.gitkeep
+backup/*
+!backup/.gitkeep
+# 开发期诊断日志
+diag.log

@@ -1,0 +1,93 @@
+/* 补录窗口样式：普通窗口（带系统标题栏），内容区深色以与阿七整体风格一致 */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #17171b;
+  color: #ececf1;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.wrap { padding: 14px 16px 16px; }
+
+.head { margin-bottom: 10px; }
+.title { font-size: 15px; font-weight: 700; }
+.sub { margin-top: 4px; font-size: 12px; color: #9a9aa5; line-height: 1.5; }
+
+/* ===== 待处理提醒 ===== */
+.pending {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 159, 67, 0.10);
+  border: 1px solid rgba(255, 159, 67, 0.35);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.pending .ok {
+  background: none;
+  border: none;
+  color: #5ee08a;
+}
+.pending .item {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 5px;
+}
+.pending .item:hover { background: rgba(255, 255, 255, 0.08); }
+.pending .item b { color: #ffd479; }
+.pending .tip { margin-top: 4px; color: #9a9aa5; font-size: 11px; }
+
+/* ===== 表单 ===== */
+.field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.field > span { width: 32px; color: #b9b9c0; flex: none; }
+.row2 { display: flex; gap: 12px; }
+.row2 .field { flex: 1; }
+
+input[type="date"], input[type="time"] {
+  flex: 1;
+  padding: 5px 8px;
+  background: #22222a;
+  color: #f2f2f5;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+input:focus { border-color: #ff9f43; }
+/* 让原生日期/时间控件的图标在深色下可见 */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+
+.hint { margin: 2px 0 12px; font-size: 11px; color: #8b8b96; line-height: 1.5; }
+
+.btns { display: flex; gap: 8px; }
+button {
+  padding: 7px 0;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.primary { flex: 1.4; background: #ff9f43; color: #1b1b1f; }
+.primary:hover { background: #ffb866; }
+.primary:disabled { opacity: 0.6; cursor: default; }
+.ghost {
+  flex: 1;
+  background: transparent;
+  color: #c5c5cd;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.ghost:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* ===== 结果反馈 ===== */
+.result { margin-top: 12px; font-size: 12px; line-height: 1.6; color: #c5c5cd; }
+.result.ok { color: #5ee08a; }
+.result.err { color: #ff7b7b; }
+.result b { color: #ffffff; }

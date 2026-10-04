@@ -1,0 +1,7 @@
+# 阿七项目工作区
+# 版本快照目录（内含 A-Qi 源码副本，不需纳入版本管理）
+_snapshots/
+
+# 依赖与运行时产物
+node_modules/
+diag.log

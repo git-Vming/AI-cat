@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>补录 / 修正考勤 · 阿七</title>
+  <link rel="stylesheet" href="repair.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="title">🩹 补录 / 修正考勤</div>
+      <div class="sub">阿七不会因为你忘记下工就把第二天算成工作时间 —— 任何异常都必须由你确认。</div>
+    </div>
+
+    <div class="pending" id="pending"></div>
+
+    <form id="form" autocomplete="off">
+      <label class="field">
+        <span>日期</span>
+        <input type="date" id="f-date" required>
+      </label>
+      <div class="row2">
+        <label class="field">
+          <span>上工</span>
+          <input type="time" id="f-start" required>
+        </label>
+        <label class="field">
+          <span>下工</span>
+          <input type="time" id="f-end" required>
+        </label>
+      </div>
+      <div class="hint">按实际时间填写即可；工作日午休 12:00–14:00 由算法自动扣除，不用手动减。</div>
+      <div class="btns">
+        <button type="submit" class="primary" id="btn-save">保存补录</button>
+        <button type="button" class="ghost" id="btn-ignore">这天没上班</button>
+        <button type="button" class="ghost" id="btn-close">关闭</button>
+      </div>
+    </form>
+
+    <div class="result" id="result"></div>
+  </div>
+  <script src="repair.js"></script>
+</body>
+</html>
