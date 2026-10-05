@@ -43,7 +43,11 @@ function ensureDataLayer(root) {
     'settings.json': {
       petName: '阿七', alwaysOnTop: true, startOnBoot: false,
       position: null,
-      eyeReminderMin: 60, sitReminderMin: 90, waterReminderMin: 120,
+      // 阶段 6：健康提醒（默认开启；间隔单位分钟；托盘可开关，设置界面留阶段 9）
+      // 注：V-ming 2026-10-05 验收决定取消喝水提醒，故默认值不再包含 waterReminderMin；
+      //     已存在的 settings.json 不会被程序改写（其中残留的该键会被忽略）。
+      remindersEnabled: true,
+      eyeReminderMin: 60, sitReminderMin: 90,
       work: {
         intervals: [['08:00', '12:00'], ['14:00', '18:00']],
         lunch: ['12:00', '14:00']
@@ -451,6 +455,20 @@ function getStats(root) {
   };
 }
 
+// ===== 阶段 6：设置更新（供托盘切换「健康提醒」开关；阶段 9 做完整设置界面） =====
+function updateSettings(root, patch) {
+  const file = path.join(paths(root).dataDir, 'settings.json');
+  const s = readJson(file, {});
+  const next = Object.assign({}, s, patch || {});
+  writeJson(file, next);
+  return next;
+}
+
+// 读取健康提醒设置（原始值；归一化交给 src/reminder.js 的 normalizeSettings）
+function getReminderSettings(root) {
+  return readJson(path.join(paths(root).dataDir, 'settings.json'), {});
+}
+
 // 等级/经验摘要：供托盘菜单显示等级与经验条（每次调用都读最新 pet.json）。
 function getLevelInfo(root) {
   const { pet } = paths(root);
@@ -473,5 +491,7 @@ module.exports = {
   isValidDate, isValidHM,
   // 阶段 5
   getTodos, setTodoDone, getStats,
+  // 阶段 6
+  updateSettings, getReminderSettings,
   todayStr, yesterdayStr, nowHM
 };

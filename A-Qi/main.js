@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -7,16 +7,20 @@ const {
   // 阶段 4
   repairAttendance, ignoreDay, findPendingRepairs,
   // 阶段 5
-  getTodos, setTodoDone, getStats
+  getTodos, setTodoDone, getStats,
+  // 阶段 6
+  getReminderSettings, updateSettings
 } = require('./src/data-store');
 const wt = require('./src/work-time');
 const wr = require('./src/work-record');
 const tf = require('./src/tray-format');
+const rm = require('./src/reminder');
 
 let mainWindow = null;
 let tray = null;
 let repairWindow = null;   // 阶段 4：补录 / 修正考勤窗口（普通窗口，非自绘面板）
 let todoWindow = null;     // 阶段 5：今日待办 + 工作统计窗口（同样用普通窗口）
+let bubbleWindow = null;   // 阶段 6：提醒气泡（独立无边框小窗，贴在阿七旁边）
 
 // 数据根目录：打包后取 exe 同目录（保证数据与程序分离、整体可迁移）；
 // 开发期取项目根目录。
@@ -281,6 +285,136 @@ function closeTodoWindow() {
   if (todoWindow && !todoWindow.isDestroyed() && todoWindow.isVisible()) todoWindow.hide();
 }
 
+// ===== 阶段 6：阿七健康提醒 =====
+// 规格 §29–31：护眼 60 / 久坐 90 / 喝水 120 分钟（连续工作计时）。
+// 触发条件三条同时满足：正在工作 + 不在午休 + 提醒开启（§30）。
+// 「连续工作分钟」直接取 getStatus().liveMinutes —— 它由区间交集算法算出、午休已被排除。
+// 提醒只弹桌宠气泡，不碰 EXP / 等级 / 考勤 / 心情（§31）。
+//
+// 档位状态只存内存：程序重启后最多对同一档位再提醒一次（无副作用），
+// 以此换取「零数据污染」——不往考勤或工作记录里塞提醒状态。
+const REMINDER_TICK_MS = 60 * 1000;
+let reminderState = rm.zeroState();
+let reminderTimer = null;
+
+function resetReminderState(reason) {
+  reminderState = rm.zeroState();
+  if (reason) logLine('[reminder] state reset (' + reason + ')');
+}
+
+function tickReminders() {
+  try {
+    const root = getAppRoot();
+    const st = getStatus(root);
+
+    // 条件 1：正在工作
+    if (!st || !st.working) { resetReminderState('not-working'); return; }
+    // 条件 2：不在午休（午休期间不触发工作相关提醒）
+    if (st.state === 'LUNCH_BREAK') return;
+
+    // 条件 3：提醒功能开启
+    const settings = getReminderSettings(root);
+    if (!rm.normalizeSettings(settings).enabled) return;
+
+    const r = rm.dueReminders(st.liveMinutes, reminderState, settings);
+    reminderState = r.state;
+    if (!r.due.length) return;
+
+    const msg = rm.composeMessage(r.due);
+    logLine('[reminder] fired ' + r.due.map((d) => `${d.key}@${d.dueAtMin}min`).join(', '));
+    // 先让阿七出现在桌面上（气泡依附在它旁边），再弹出气泡。
+    // 气泡不会自动消失，需左键单击阿七或气泡才关闭（V-ming 2026-10-05 要求）。
+    showWindow();
+    showBubble(msg);
+  } catch (e) {
+    logLine('[reminder] tick failed: ' + (e && e.message));
+  }
+}
+
+function startReminderTimer() {
+  if (reminderTimer) clearInterval(reminderTimer);
+  reminderTimer = setInterval(tickReminders, REMINDER_TICK_MS);
+  logLine(`[reminder] timer started (every ${REMINDER_TICK_MS / 1000}s)`);
+}
+
+function remindersEnabled() {
+  return rm.normalizeSettings(getReminderSettings(getAppRoot())).enabled;
+}
+
+// ===== 阶段 6：提醒气泡（独立小窗，贴在阿七旁边）=====
+// V-ming 2026-10-05 要求：提醒显示为阿七旁边的气泡，不在状态卡内；
+//   且**不会自动消失**，只有「左键单击阿七」或「左键单击气泡」才消失。
+// 选型：做成独立无边框小窗，而不是扩大桌宠主窗口 ——
+//   主窗口 180×200 是已验收的布局，扩窗会牵动拖动/点击/卡片，风险大；
+//   独立小窗不动主窗口，只需在主窗口移动时同步跟随。
+const BUBBLE_W = 216;
+const BUBBLE_H = 76;
+const BUBBLE_GAP = 6;
+
+function createBubbleWindow() {
+  bubbleWindow = new BrowserWindow({
+    width: BUBBLE_W,
+    height: BUBBLE_H,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    title: '阿七提醒',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  bubbleWindow.loadFile(path.join(__dirname, 'src', 'bubble.html'));
+  bubbleWindow.on('closed', () => { bubbleWindow = null; logLine('[bubble] closed'); });
+  logLine('[bubble] window created');
+}
+
+// 依主窗口当前位置计算气泡坐标：默认贴在阿七【上方】，上方空间不够则放下方
+function positionBubble() {
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const b = mainWindow.getBounds();
+  let wa = { x: 0, y: 0, width: 1920, height: 1080 };
+  try { wa = screen.getDisplayMatching(b).workArea; } catch (_) {}
+
+  let x = Math.round(b.x + b.width / 2 - BUBBLE_W / 2);
+  let y = Math.round(b.y - BUBBLE_H - BUBBLE_GAP);
+  if (y < wa.y + 4) y = Math.round(b.y + b.height + BUBBLE_GAP);   // 上方放不下 → 放下方
+  x = Math.min(Math.max(x, wa.x + 4), wa.x + wa.width - BUBBLE_W - 4);
+  y = Math.min(Math.max(y, wa.y + 4), wa.y + wa.height - BUBBLE_H - 4);
+  bubbleWindow.setBounds({ x, y, width: BUBBLE_W, height: BUBBLE_H });
+}
+
+function bubbleVisible() {
+  return !!(bubbleWindow && !bubbleWindow.isDestroyed() && bubbleWindow.isVisible());
+}
+
+function showBubble(text) {
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) createBubbleWindow();
+  const paint = () => {
+    if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+    try { bubbleWindow.webContents.send('aqi:bubble-text', text); } catch (_) {}
+    positionBubble();
+    bubbleWindow.show();
+    if (typeof bubbleWindow.moveTop === 'function') bubbleWindow.moveTop();
+    logLine('[bubble] shown: ' + text);
+  };
+  if (bubbleWindow.webContents.isLoading()) bubbleWindow.once('ready-to-show', () => setTimeout(paint, 60));
+  else paint();
+}
+
+function hideBubble() {
+  if (bubbleVisible()) {
+    bubbleWindow.hide();
+    logLine('[bubble] hidden');
+  }
+}
+
 // ===== 托盘菜单 =====
 // 顶部为「等级 + 经验条」两行，其后为原有菜单项（显示/隐藏/上工/下工/退出）。
 // 说明：Windows 原生菜单只能纯文本，故经验条用方块字符 █/░ 画 5 格近似（长度 = 状态卡经验条的一半）。
@@ -294,13 +428,13 @@ function buildTrayTemplate() {
     { label: `🐱 ${li.name} · Lv.${li.level}`, enabled: false },
     { label: `EXP ${bar} ${inLv.toFixed(1)}/${need}`, enabled: false },
     { type: 'separator' },
-    { label: '显示阿七', click: () => showWindow() },
-    { label: '隐藏阿七', click: () => hideWindow() },
-    { type: 'separator' },
+    // 注：V-ming 2026-10-05 验收决定删除「显示阿七 / 隐藏阿七」两项 ——
+    //     左键单击托盘图标即可切换显示/隐藏，功能重复；菜单项太多。
     {
       label: '🟢 上工', click: () => {
         const r = punchIn(getAppRoot());
         logLine(`[tray] 上工 ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+        if (r.ok) resetReminderState('punch-in');   // 阶段 6：新会话，提醒档位归零
         syncTodayRecord();
         setTimeout(refreshTrayMenu, 0);
         showWindow();
@@ -313,6 +447,7 @@ function buildTrayTemplate() {
       label: '🔴 下工', click: () => {
         const r = punchOut(getAppRoot());
         logLine(`[tray] 下工 ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+        if (r.ok) resetReminderState('punch-out');
         syncTodayRecord();
         setTimeout(refreshTrayMenu, 0);
         showWindow();
@@ -331,6 +466,19 @@ function buildTrayTemplate() {
     {
       label: pending.length ? `🩹 待补录（${pending.length} 天）` : '🩹 补录 / 修正考勤',
       click: () => openRepairWindow()
+    },
+    { type: 'separator' },
+    {
+      // 阶段 6：健康提醒开关（设置界面留阶段 9，这里先给一个随时可关的入口）
+      type: 'checkbox',
+      label: '🔔 健康提醒',
+      checked: remindersEnabled(),
+      click: (mi) => {
+        updateSettings(getAppRoot(), { remindersEnabled: !!mi.checked });
+        logLine('[tray] 健康提醒 ' + (mi.checked ? '开启' : '关闭'));
+        resetReminderState('toggle');
+        setTimeout(refreshTrayMenu, 0);
+      }
     },
     { type: 'separator' },
     { label: '退出', click: () => { logLine('[tray] 退出'); app.quit(); } },
@@ -384,6 +532,7 @@ ipcMain.on('aqi:drag', (e, dx, dy) => {
   if (!mainWindow) return;
   const [x, y] = mainWindow.getPosition();
   mainWindow.setPosition(Math.round(x + dx), Math.round(y + dy));
+  if (bubbleVisible()) positionBubble();   // 阶段 6：气泡跟随阿七一起移动
 });
 // 诊断：渲染层日志上报（PM 反馈：不再提供页内 DevTools 入口，日志足够）
 ipcMain.on('aqi:log', (e, msg) => logLine(`[renderer] ${msg}`));
@@ -392,12 +541,14 @@ ipcMain.on('aqi:log', (e, msg) => logLine(`[renderer] ${msg}`));
 ipcMain.handle('aqi:get-status', () => getStatus(getAppRoot()));
 ipcMain.handle('aqi:punch-in', () => {
   const r = punchIn(getAppRoot());
+  if (r.ok) resetReminderState('punch-in');   // 阶段 6
   refreshTrayMenu();
   syncTodayRecord();
   return r;
 });
 ipcMain.handle('aqi:punch-out', () => {
   const r = punchOut(getAppRoot());
+  if (r.ok) resetReminderState('punch-out');  // 阶段 6
   refreshTrayMenu();
   syncTodayRecord();
   return r;
@@ -412,6 +563,7 @@ ipcMain.handle('aqi:repair', (e, payload) => {
   logLine(`[repair] date=${p.date} ${p.start}→${p.end} ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
   if (r.ok) {
     syncRecordFor(r.record.date);   // 同步该日 TXT（考勤段会标注"考勤状态：补录"）
+    resetReminderState('repair');   // 阶段 6：补录可能改变今日工时，档位重算更安全
     refreshTrayMenu();
   }
   return r;
@@ -437,6 +589,15 @@ ipcMain.handle('aqi:set-todo', (e, payload) => {
 ipcMain.handle('aqi:get-stats', () => getStats(getAppRoot()));
 ipcMain.on('aqi:close-todo', () => closeTodoWindow());
 
+// ===== 阶段 6：提醒气泡 =====
+ipcMain.on('aqi:hide-bubble', () => hideBubble());
+// 点击阿七时先调用：若气泡正显示则关掉它，并返回 true（这一击被气泡用掉）
+ipcMain.handle('aqi:dismiss-bubble', () => {
+  if (!bubbleVisible()) return false;
+  hideBubble();
+  return true;
+});
+
 // ===== 子进程（含 GPU）异常日志：透明窗口在部分显卡/远程会话下 GPU 进程可能反复崩溃 =====
 app.on('child-process-gone', (e, details) => {
   logLine(`[main] child-process-gone type=${details && details.type} reason=${details && details.reason} exitCode=${details && details.exitCode}`);
@@ -457,6 +618,7 @@ if (!gotLock) {
     syncIncompleteRecords();        // 阶段 3：补齐跨天未下工那几天的记录
     createWindow();
     createTray();
+    startReminderTimer();   // 阶段 6：健康提醒定时检查（每 60 秒）
     // 阶段 4：第二天提醒 —— 仅当存在待处理异常（忘记上工 / 忘记下工）时才弹出补录窗口。
     // 没有任何异常时不打扰用户；随时也可从托盘「🩹 补录 / 修正考勤」手动打开。
     const pending = findPendingRepairs(getAppRoot());

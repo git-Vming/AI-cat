@@ -1,0 +1,48 @@
+/* 阶段 6：提醒气泡（独立无边框小窗，显示在阿七旁边）
+   尺寸由主进程固定为 216×76；尖角朝下，指向下方的阿七。 */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 216px;
+  height: 76px;
+  background: transparent;   /* 必须透明：只保留气泡本体可见 */
+  overflow: hidden;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  user-select: none;
+  cursor: pointer;           /* 整块可点，单击即消失 */
+}
+
+.bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 12px;              /* 底部留 12px 给尖角 */
+  padding: 8px 11px;
+  background: rgba(28, 28, 34, 0.96);
+  color: #f4f4f7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  word-break: break-all;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* 朝下的尖角 → 指向下方的阿七 */
+.bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(28, 28, 34, 0.96);
+}

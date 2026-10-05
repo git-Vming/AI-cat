@@ -82,7 +82,21 @@ function onPointerUp(e) {
   dragging = false;
   try { pet.releasePointerCapture(e.pointerId); } catch (_) {}
   log('pointerup moved=' + moved);
-  if (!moved) { pointerUpHandled = true; toggleCard(); }
+  if (!moved) { pointerUpHandled = true; handlePetClick(); }
+}
+
+// 阶段 6：若阿七旁边正显示提醒气泡，则这次「左键单击」优先用来关掉气泡
+// （V-ming 2026-10-05 要求：气泡只有点击阿七或点击气泡才消失）；否则照旧切换状态卡。
+async function handlePetClick() {
+  try {
+    if (api && api.dismissBubble) {
+      const hadBubble = await api.dismissBubble();
+      if (hadBubble) { log('pet click -> dismissed bubble'); return; }
+    }
+  } catch (err) {
+    log('dismissBubble failed: ' + (err && err.message ? err.message : err));
+  }
+  toggleCard();
 }
 
 pet.addEventListener('pointerdown', onPointerDown);
@@ -93,7 +107,7 @@ pet.addEventListener('pointercancel', () => { dragging = false; log('pointercanc
 pet.addEventListener('click', () => {
   if (moved) { moved = false; return; }                       // 拖动结束后的 click 忽略
   if (pointerUpHandled) { pointerUpHandled = false; return; } // 本次点击已由 pointerup 处理，跳过
-  toggleCard();
+  handlePetClick();
 });
 
 // ===== 卡片与状态渲染 =====

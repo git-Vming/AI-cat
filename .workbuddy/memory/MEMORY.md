@@ -47,6 +47,23 @@
 - **待办**：来源恒为「前一天」TXT 的【明日待办】（规格§27）；勾选状态只存 `data/tasks.json`，
   **V-ming 2026-10-05 明确决定：不回写 TXT、不带进次日**。实现：`src/todo.js`（解析）+ `src/todo-window.js`（窗口）。
 
+## 健康提醒（阶段6 确立）
+- 两种提醒与默认间隔：**护眼 60 / 久坐 90 分钟**（`settings.json` 的 `eyeReminderMin` / `sitReminderMin`）。
+  ⚠ **喝水提醒已于 2026-10-05 被 V-ming 取消**，不再实现；旧 settings 里残留的 `waterReminderMin` 会被忽略。
+- 触发三条件（规格 §30，必须同时满足）：**正在工作 + 不在午休(12:00–14:00) + `remindersEnabled !== false`**。
+- 实现：`src/reminder.js`（纯函数；档位法 `level = floor(liveMinutes / interval)`，同档位不重复提醒，跨多档只报一条但状态推到最新）；`main.js` 每 60 秒 tick 一次。
+- **「连续工作分钟」直接用 `getStatus().liveMinutes`** —— 区间交集算法已排除午休，无需另建计时器。
+- **提醒呈现 = 阿七旁边的独立气泡小窗**（`src/bubble.html` / `bubble.css` / `bubble-window.js`，216×76 无边框透明）：
+  · **不动桌宠主窗口**（180×200 是已验收布局，扩窗回归风险大）；默认贴阿七上方，空间不足自动翻下方；拖动时 `positionBubble()` 跟随。
+  · **不自动消失**（无超时）；只有「左键单击气泡 / 左键单击阿七 / Esc」才关。
+  · 点击阿七时 `app.js` 的 `handlePetClick()` 先 `dismissBubble()`，返回 true 则这一击只关气泡、不弹卡。
+- **提醒不是惩罚（规格 §31）**：提醒链路只写 diag.log + 弹气泡，**绝不写 attendance/statistics/pet**，结构性保证不影响 EXP/等级/考勤/心情。
+- 档位状态**只存内存**（程序重启后可能对同一档位再提醒一次，换取零数据污染）。
+- 托盘有勾选项「🔔 健康提醒」可随时开关；间隔调整界面留阶段 9。
+- **托盘已删除「显示阿七 / 隐藏阿七」**（2026-10-05）：左键单击托盘图标即可切换，不必重复占用菜单项。
+- 档位状态**只存内存**（程序重启后可能对同一档位再提醒一次，换取零数据污染）。
+- 托盘有勾选项「🔔 健康提醒」可随时开关；间隔调整界面留阶段 9。
+
 ## 工程约定（踩过的坑，务必遵守）
 - 工程目录：`D:\AI-cat\AI-cat\A-Qi\`（Electron 项目源码 + data/ + WorkRecords/ + assets/）。
 - 数据根目录：打包后取 exe 同目录；开发期取项目根目录。data/ 与 WorkRecords/ 必须独立于程序代码。

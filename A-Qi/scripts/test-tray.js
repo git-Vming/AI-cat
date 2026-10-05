@@ -55,6 +55,16 @@ console.log('— ③ main.js 托盘结构（防回归）—');
   // 版本项必须是模板里的最后一项（后面紧跟 ] ）
   const tail = src.slice(iVer, iVer + 200);
   check('版本号是菜单最后一项（其后无其它菜单项）', /\]\s*;/.test(tail), tail.split('\n')[0]);
+
+  // 阶段 6 增补（V-ming 2026-10-05 验收要求）
+  check('已删除「显示阿七」菜单项（与左键单击托盘重复）',
+    !/label:\s*['"]显示阿七['"]/.test(src));
+  check('已删除「隐藏阿七」菜单项（与左键单击托盘重复）',
+    !/label:\s*['"]隐藏阿七['"]/.test(src));
+  check('存在「🔔 健康提醒」勾选项',
+    /type:\s*['"]checkbox['"],[\s\S]{0,80}?label:\s*['"]🔔 健康提醒['"]/.test(src));
+  check('健康提醒勾选项写入 settings（remindersEnabled）',
+    /remindersEnabled:\s*!!mi\.checked/.test(src));
 }
 
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
