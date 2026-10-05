@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const wt = require('./work-time');
+const todo = require('./todo');
+const stats = require('./stats');
+const wr = require('./work-record');
 
 function readJson(file, fallback) {
   try {
@@ -389,6 +392,65 @@ function findPendingRepairs(root) {
   return out;
 }
 
+// ===== 阶段 5：今日待办（tasks.json） =====
+// 职责分离（技术规格 §28）：TXT 是工作记录（用户手写，绝不改写）；tasks.json 只存待办勾选状态。
+// 来源：读取【前一天】工作记录 TXT 的【明日待办】，成为今天的待办。
+//
+// 注意：不缓存"空列表"——若前一天还没有记录，本次返回空且不落盘，
+// 这样用户稍后补写了昨天的【明日待办】，再打开就能拿到最新内容。
+function getTodos(root, date) {
+  const d = date || todayStr();
+  const file = path.join(paths(root).dataDir, 'tasks.json');
+  const all = readJson(file, {});
+  const from = todo.prevDate(d);
+
+  if (Array.isArray(all[d]) && all[d].length) {
+    return { date: d, from, items: all[d] };
+  }
+
+  const text = wr.readRecord(root, from) || '';
+  const items = todo.mergeState(todo.parseTodoLines(text), all[d]);
+  if (items.length) {
+    all[d] = items;
+    writeJson(file, all);
+  }
+  return { date: d, from, items };
+}
+
+// 勾选 / 取消勾选某一条今日待办
+function setTodoDone(root, date, index, done) {
+  const d = date || todayStr();
+  const file = path.join(paths(root).dataDir, 'tasks.json');
+  const all = readJson(file, {});
+  const list = Array.isArray(all[d]) ? all[d] : null;
+  if (!list) return { ok: false, reason: 'no_list' };
+
+  const i = Number(index);
+  if (!Number.isInteger(i) || i < 0 || i >= list.length) return { ok: false, reason: 'bad_index' };
+
+  list[i].completed = !!done;
+  all[d] = list;
+  writeJson(file, all);
+  return { ok: true, date: d, items: list };
+}
+
+// ===== 阶段 5：工作统计 =====
+// 数据全部由 attendance.json（经 stats.js 纯函数）派生，另附 pet.json 的累计 EXP 与当前等级。
+function getStats(root) {
+  const { attendance, pet } = paths(root);
+  const att = readJson(attendance, {});
+  const s = stats.computeStats(att, new Date());
+  const p = readJson(pet, { level: 1, exp: 0, totalExp: 0 });
+  const totalExp = p.totalExp || 0;
+  return {
+    ...s,
+    totalExp: wt.round1(totalExp),
+    level: wt.levelFromTotalExp(totalExp),
+    exp: wt.round1(wt.expInLevel(totalExp)),
+    expPerLevel: wt.EXP_PER_LEVEL
+  };
+}
+
 // 等级/经验摘要：供托盘菜单显示等级与经验条（每次调用都读最新 pet.json）。
 function getLevelInfo(root) {
   const { pet } = paths(root);
@@ -409,5 +471,7 @@ module.exports = {
   // 阶段 4
   recomputeAll, repairAttendance, ignoreDay, findPendingRepairs,
   isValidDate, isValidHM,
+  // 阶段 5
+  getTodos, setTodoDone, getStats,
   todayStr, yesterdayStr, nowHM
 };

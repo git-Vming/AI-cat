@@ -5,7 +5,9 @@ const {
   ensureDataLayer, punchIn, punchOut, getStatus, resumeIncomplete, getLevelInfo,
   readJson, todayStr,
   // 阶段 4
-  repairAttendance, ignoreDay, findPendingRepairs
+  repairAttendance, ignoreDay, findPendingRepairs,
+  // 阶段 5
+  getTodos, setTodoDone, getStats
 } = require('./src/data-store');
 const wt = require('./src/work-time');
 const wr = require('./src/work-record');
@@ -14,6 +16,7 @@ const tf = require('./src/tray-format');
 let mainWindow = null;
 let tray = null;
 let repairWindow = null;   // 阶段 4：补录 / 修正考勤窗口（普通窗口，非自绘面板）
+let todoWindow = null;     // 阶段 5：今日待办 + 工作统计窗口（同样用普通窗口）
 
 // 数据根目录：打包后取 exe 同目录（保证数据与程序分离、整体可迁移）；
 // 开发期取项目根目录。
@@ -225,6 +228,59 @@ function closeRepairWindow() {
   if (repairWindow && !repairWindow.isDestroyed() && repairWindow.isVisible()) repairWindow.hide();
 }
 
+// ===== 阶段 5：今日待办 + 工作统计窗口 =====
+// 与补录窗口同样的选型：普通窗口（系统标题栏 + 原生关闭按钮），一个窗口上下两区，
+// 托盘的「📋 今日待办」「📊 工作统计」打开的是同一个窗口，只是滚动定位到对应区域。
+function createTodoWindow() {
+  todoWindow = new BrowserWindow({
+    width: 486,
+    height: 620,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: '今日待办 / 工作统计 · 阿七',
+    autoHideMenuBar: true,
+    backgroundColor: '#17171b',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  const wc = todoWindow.webContents;
+  wc.on('did-finish-load', () => logLine('[todo-window] did-finish-load'));
+  wc.on('did-fail-load', (e, code, desc) => logLine(`[todo-window] did-fail-load code=${code} desc=${desc}`));
+  wc.on('preload-error', (e, p, err) => logLine(`[todo-window] preload-error ${err && err.message}`));
+  wc.on('console-message', (...args) => {
+    const maybe = args[1];
+    const msg = (maybe && typeof maybe === 'object') ? maybe.message : args[2];
+    logLine(`[todo-console] ${msg}`);
+  });
+
+  todoWindow.loadFile(path.join(__dirname, 'src', 'todo.html'));
+  todoWindow.on('closed', () => { todoWindow = null; logLine('[todo-window] closed'); });
+}
+
+function openTodoWindow(section) {
+  if (!todoWindow || todoWindow.isDestroyed()) createTodoWindow();
+  const show = () => {
+    if (!todoWindow || todoWindow.isDestroyed()) return;
+    todoWindow.show();
+    todoWindow.focus();
+    // 渲染层加载完成后再要求滚动定位，否则监听还没挂上
+    try { todoWindow.webContents.send('aqi:todo-focus', section === 'stats' ? 'stats' : 'todo'); } catch (_) {}
+    logLine(`[todo-window] shown (${section || 'todo'})`);
+  };
+  if (todoWindow.webContents.isLoading()) todoWindow.once('ready-to-show', () => setTimeout(show, 120));
+  else show();
+}
+
+function closeTodoWindow() {
+  if (todoWindow && !todoWindow.isDestroyed() && todoWindow.isVisible()) todoWindow.hide();
+}
+
 // ===== 托盘菜单 =====
 // 顶部为「等级 + 经验条」两行，其后为原有菜单项（显示/隐藏/上工/下工/退出）。
 // 说明：Windows 原生菜单只能纯文本，故经验条用方块字符 █/░ 画 5 格近似（长度 = 状态卡经验条的一半）。
@@ -268,6 +324,9 @@ function buildTrayTemplate() {
     { type: 'separator' },
     { label: '📝 今日工作记录', click: () => openTodayRecord() },
     { label: '📁 工作记录（历史）', click: () => openRecordsFolder() },
+    { type: 'separator' },
+    { label: '📋 今日待办', click: () => openTodoWindow('todo') },
+    { label: '📊 工作统计', click: () => openTodoWindow('stats') },
     { type: 'separator' },
     {
       label: pending.length ? `🩹 待补录（${pending.length} 天）` : '🩹 补录 / 修正考勤',
@@ -366,6 +425,17 @@ ipcMain.handle('aqi:ignore-day', (e, date) => {
 });
 
 ipcMain.on('aqi:close-repair', () => closeRepairWindow());
+
+// ===== 阶段 5：今日待办 / 工作统计 =====
+ipcMain.handle('aqi:get-todos', () => getTodos(getAppRoot()));
+ipcMain.handle('aqi:set-todo', (e, payload) => {
+  const p = payload || {};
+  const r = setTodoDone(getAppRoot(), p.date, p.index, p.done);
+  logLine(`[todo] set date=${p.date} index=${p.index} done=${p.done} ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+  return r;
+});
+ipcMain.handle('aqi:get-stats', () => getStats(getAppRoot()));
+ipcMain.on('aqi:close-todo', () => closeTodoWindow());
 
 // ===== 子进程（含 GPU）异常日志：透明窗口在部分显卡/远程会话下 GPU 进程可能反复崩溃 =====
 app.on('child-process-gone', (e, details) => {

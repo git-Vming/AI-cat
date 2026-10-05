@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('aqi', {
   repair: (payload) => ipcRenderer.invoke('aqi:repair', payload),
   ignoreDay: (date) => ipcRenderer.invoke('aqi:ignore-day', date),
   closeRepair: () => ipcRenderer.send('aqi:close-repair'),
+  // 阶段 5：今日待办 / 工作统计
+  getTodos: () => ipcRenderer.invoke('aqi:get-todos'),
+  setTodo: (payload) => ipcRenderer.invoke('aqi:set-todo', payload),
+  getStats: () => ipcRenderer.invoke('aqi:get-stats'),
+  closeTodo: () => ipcRenderer.send('aqi:close-todo'),
+  onFocusSection: (cb) => ipcRenderer.on('aqi:todo-focus', (e, sec) => cb(sec)),
   // 诊断：渲染层日志上报 → 主进程写入 diag.log（PM 反馈：不再提供页内 DevTools 入口）
   log: (msg) => ipcRenderer.send('aqi:log', msg),
   platform: process.platform

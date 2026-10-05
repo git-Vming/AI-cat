@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>今日待办 / 工作统计 · 阿七</title>
+  <link rel="stylesheet" href="todo.css">
+</head>
+<body>
+  <div class="wrap">
+
+    <section id="sec-todo">
+      <div class="head">
+        <div class="title">📋 今日待办</div>
+        <div class="sub" id="todo-sub">—</div>
+      </div>
+      <div class="todos" id="todos"></div>
+    </section>
+
+    <section id="sec-stats">
+      <div class="head">
+        <div class="title">📊 工作统计</div>
+        <div class="sub">时长以「时:分」显示，「—」表示该时段无记录</div>
+      </div>
+      <table class="stats">
+        <thead>
+          <tr>
+            <th class="k">指标</th>
+            <th>今日</th>
+            <th>本周</th>
+            <th>本月</th>
+            <th>累计</th>
+          </tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+      <div class="foot" id="stats-foot"></div>
+    </section>
+
+    <div class="btns">
+      <button type="button" class="ghost" id="btn-close">关闭</button>
+    </div>
+    <div class="result" id="result"></div>
+  </div>
+  <script src="todo-window.js"></script>
+</body>
+</html>
