@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>互动 / 宠物状态 · 阿七</title>
+  <link rel="stylesheet" href="growth.css">
+</head>
+<body>
+  <div class="wrap">
+
+    <section id="sec-interact">
+      <div class="head">
+        <div class="title">❤️ 互动</div>
+        <div class="sub" id="interact-sub">—</div>
+      </div>
+      <div class="acts" id="acts"></div>
+      <div class="note">互动只增加<strong>好感度</strong>，不产生 EXP —— EXP 只来自你的真实工作时长。</div>
+    </section>
+
+    <section id="sec-status">
+      <div class="head">
+        <div class="title">🎒 宠物状态</div>
+        <div class="sub">阿七现在怎么样</div>
+      </div>
+      <div class="rows" id="status-rows"></div>
+      <div class="unlock-head">升级解锁</div>
+      <div class="unlocks" id="unlocks"></div>
+    </section>
+
+    <div class="btns">
+      <button type="button" class="ghost" id="btn-close">关闭</button>
+    </div>
+    <div class="result" id="result"></div>
+  </div>
+  <script src="growth-window.js"></script>
+</body>
+</html>

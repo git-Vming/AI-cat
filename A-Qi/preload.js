@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('aqi', {
   // 点击阿七时先尝试关掉气泡；返回 true 表示"这一击已被气泡用掉"
   dismissBubble: () => ipcRenderer.invoke('aqi:dismiss-bubble'),
   onBubbleText: (cb) => ipcRenderer.on('aqi:bubble-text', (e, text) => cb(text)),
+  // 阶段 7：成长 / 互动
+  getGrowth: () => ipcRenderer.invoke('aqi:get-growth'),
+  interact: (key) => ipcRenderer.invoke('aqi:interact', key),
+  closeGrowth: () => ipcRenderer.send('aqi:close-growth'),
+  onGrowthFocus: (cb) => ipcRenderer.on('aqi:growth-focus', (e, sec) => cb(sec)),
   // 诊断：渲染层日志上报 → 主进程写入 diag.log（PM 反馈：不再提供页内 DevTools 入口）
   log: (msg) => ipcRenderer.send('aqi:log', msg),
   platform: process.platform

@@ -9,18 +9,22 @@ const {
   // 阶段 5
   getTodos, setTodoDone, getStats,
   // 阶段 6
-  getReminderSettings, updateSettings
+  getReminderSettings, updateSettings,
+  // 阶段 7
+  getGrowth, interact, recomputeAll
 } = require('./src/data-store');
 const wt = require('./src/work-time');
 const wr = require('./src/work-record');
 const tf = require('./src/tray-format');
 const rm = require('./src/reminder');
+const growth = require('./src/growth');
 
 let mainWindow = null;
 let tray = null;
 let repairWindow = null;   // 阶段 4：补录 / 修正考勤窗口（普通窗口，非自绘面板）
 let todoWindow = null;     // 阶段 5：今日待办 + 工作统计窗口（同样用普通窗口）
 let bubbleWindow = null;   // 阶段 6：提醒气泡（独立无边框小窗，贴在阿七旁边）
+let growthWindow = null;   // 阶段 7：互动 + 宠物状态窗口（同样用普通窗口）
 
 // 数据根目录：打包后取 exe 同目录（保证数据与程序分离、整体可迁移）；
 // 开发期取项目根目录。
@@ -415,6 +419,85 @@ function hideBubble() {
   }
 }
 
+// ===== 阶段 7：互动 + 宠物状态窗口 =====
+// 与补录/待办窗口同样的选型：普通窗口（有系统标题栏，能关）。
+// 托盘的「❤️ 互动」「🎒 宠物状态」打开的是同一个窗口，只是滚动定位到对应区域。
+//
+// 宠物状态由 pure 模块 growth.computeState 判定，输入 = 是否工作中 / 气泡是否在显示 / 最近一次互动。
+let lastAction = null;        // 'pat' | 'feed' | 'water' | 'play' | 'levelup'
+let lastActionAt = null;
+
+function currentPetState() {
+  let st = null;
+  try { st = getStatus(getAppRoot()); } catch (_) {}
+  return growth.computeState({
+    working: !!(st && st.working),
+    bubbleShown: bubbleVisible(),
+    lastAction,
+    lastActionAt
+  }, new Date());
+}
+
+function createGrowthWindow() {
+  growthWindow = new BrowserWindow({
+    width: 470,
+    height: 600,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: '互动 / 宠物状态 · 阿七',
+    autoHideMenuBar: true,
+    backgroundColor: '#17171b',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  const wc = growthWindow.webContents;
+  wc.on('did-finish-load', () => logLine('[growth-window] did-finish-load'));
+  wc.on('did-fail-load', (e, code, desc) => logLine(`[growth-window] did-fail-load code=${code} desc=${desc}`));
+  wc.on('preload-error', (e, p, err) => logLine(`[growth-window] preload-error ${err && err.message}`));
+  wc.on('console-message', (...args) => {
+    const maybe = args[1];
+    const msg = (maybe && typeof maybe === 'object') ? maybe.message : args[2];
+    logLine(`[growth-console] ${msg}`);
+  });
+
+  growthWindow.loadFile(path.join(__dirname, 'src', 'growth.html'));
+  growthWindow.on('closed', () => { growthWindow = null; logLine('[growth-window] closed'); });
+}
+
+function openGrowthWindow(section) {
+  if (!growthWindow || growthWindow.isDestroyed()) createGrowthWindow();
+  const show = () => {
+    if (!growthWindow || growthWindow.isDestroyed()) return;
+    growthWindow.show();
+    growthWindow.focus();
+    try { growthWindow.webContents.send('aqi:growth-focus', section === 'status' ? 'status' : 'interact'); } catch (_) {}
+    logLine(`[growth-window] shown (${section || 'interact'})`);
+  };
+  if (growthWindow.webContents.isLoading()) growthWindow.once('ready-to-show', () => setTimeout(show, 120));
+  else show();
+}
+
+function closeGrowthWindow() {
+  if (growthWindow && !growthWindow.isDestroyed() && growthWindow.isVisible()) growthWindow.hide();
+}
+
+// 升级提示：等级提升时用气泡告知（并附带新解锁的道具）
+function announceLevelUp(level, newUnlocks) {
+  const lines = [growth.levelUpMessage(level)];
+  const um = growth.unlockMessage(newUnlocks);
+  if (um) lines.push(um);
+  lastAction = 'levelup';
+  lastActionAt = new Date().toISOString();
+  showBubble(lines.join('\n'));
+  logLine('[growth] level up -> Lv.' + level + (um ? ' / ' + um : ''));
+}
+
 // ===== 托盘菜单 =====
 // 顶部为「等级 + 经验条」两行，其后为原有菜单项（显示/隐藏/上工/下工/退出）。
 // 说明：Windows 原生菜单只能纯文本，故经验条用方块字符 █/░ 画 5 格近似（长度 = 状态卡经验条的一半）。
@@ -450,6 +533,7 @@ function buildTrayTemplate() {
         if (r.ok) resetReminderState('punch-out');
         syncTodayRecord();
         setTimeout(refreshTrayMenu, 0);
+        if (r.ok && r.levelUp) announceLevelUp(r.pet.level, r.newUnlocks);   // 阶段 7
         showWindow();
         if (mainWindow) mainWindow.webContents.send(
           'aqi:open-card', r.ok ? `下工结算 +${r.record.exp.toFixed(1)} EXP` : '还没上工哦'
@@ -462,6 +546,9 @@ function buildTrayTemplate() {
     { type: 'separator' },
     { label: '📋 今日待办', click: () => openTodoWindow('todo') },
     { label: '📊 工作统计', click: () => openTodoWindow('stats') },
+    { type: 'separator' },
+    { label: '❤️ 互动', click: () => openGrowthWindow('interact') },
+    { label: '🎒 宠物状态', click: () => openGrowthWindow('status') },
     { type: 'separator' },
     {
       label: pending.length ? `🩹 待补录（${pending.length} 天）` : '🩹 补录 / 修正考勤',
@@ -548,7 +635,10 @@ ipcMain.handle('aqi:punch-in', () => {
 });
 ipcMain.handle('aqi:punch-out', () => {
   const r = punchOut(getAppRoot());
-  if (r.ok) resetReminderState('punch-out');  // 阶段 6
+  if (r.ok) {
+    resetReminderState('punch-out');  // 阶段 6
+    if (r.levelUp) announceLevelUp(r.pet.level, r.newUnlocks);   // 阶段 7
+  }
   refreshTrayMenu();
   syncTodayRecord();
   return r;
@@ -564,6 +654,7 @@ ipcMain.handle('aqi:repair', (e, payload) => {
   if (r.ok) {
     syncRecordFor(r.record.date);   // 同步该日 TXT（考勤段会标注"考勤状态：补录"）
     resetReminderState('repair');   // 阶段 6：补录可能改变今日工时，档位重算更安全
+    if (r.levelUp) announceLevelUp(r.pet.level, r.newUnlocks);   // 阶段 7
     refreshTrayMenu();
   }
   return r;
@@ -588,6 +679,30 @@ ipcMain.handle('aqi:set-todo', (e, payload) => {
 });
 ipcMain.handle('aqi:get-stats', () => getStats(getAppRoot()));
 ipcMain.on('aqi:close-todo', () => closeTodoWindow());
+
+// ===== 阶段 7：成长 / 互动 =====
+ipcMain.handle('aqi:get-growth', () => {
+  const st = currentPetState();
+  return Object.assign({}, getGrowth(getAppRoot()), {
+    state: st,
+    stateText: growth.stateText(st),
+    stateEmoji: growth.stateEmoji(st)
+  });
+});
+
+ipcMain.handle('aqi:interact', (e, key) => {
+  const r = interact(getAppRoot(), key);
+  logLine(`[growth] interact ${key} ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+  if (r.ok) {
+    lastAction = key;
+    lastActionAt = new Date().toISOString();
+    r.state = currentPetState();
+    r.stateText = growth.stateText(r.state);
+  }
+  return r;
+});
+
+ipcMain.on('aqi:close-growth', () => closeGrowthWindow());
 
 // ===== 阶段 6：提醒气泡 =====
 ipcMain.on('aqi:hide-bubble', () => hideBubble());
@@ -614,6 +729,12 @@ if (!gotLock) {
     logLine('[main] app ready');
     ensureDataLayer(getAppRoot());
     resumeIncomplete(getAppRoot()); // 跨天 working 置 incomplete，防止误算超长工时
+    // 阶段 7：启动时全量重算一次 —— 顺带把 unlockedItems 按当前等级补全
+    //（老数据的 pet.json 里 unlockedItems 可能是空的，等级却已很高）
+    const boot = recomputeAll(getAppRoot());
+    if (boot.newUnlocks.length) {
+      logLine('[growth] 启动补全解锁：' + boot.newUnlocks.map((u) => u.name).join('、'));
+    }
     syncTodayRecord();              // 阶段 3：同步今日工作记录 TXT
     syncIncompleteRecords();        // 阶段 3：补齐跨天未下工那几天的记录
     createWindow();

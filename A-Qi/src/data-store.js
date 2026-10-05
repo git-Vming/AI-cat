@@ -3,6 +3,7 @@ const path = require('path');
 const wt = require('./work-time');
 const todo = require('./todo');
 const stats = require('./stats');
+const growth = require('./growth');
 const wr = require('./work-record');
 
 function readJson(file, fallback) {
@@ -32,7 +33,9 @@ function ensureDataLayer(root) {
   const defaults = {
     'pet.json': {
       name: '阿七', level: 1, exp: 0, totalExp: 0, affection: 0,
-      createdAt: today, skin: 'default', unlockedItems: [], interactionCount: 0
+      createdAt: today, skin: 'default', unlockedItems: [], interactionCount: 0,
+      // 阶段 7：互动系统。interactionsToday 只保留"当天"的计数（跨天自动归零）
+      interactionsToday: { date: today, counts: {} }
     },
     'attendance.json': {},
     'statistics.json': {
@@ -164,8 +167,8 @@ function punchOut(root) {
   rec.counted = true;
 
   writeJson(attendance, att);
-  const { pet: p } = recomputeAll(root);   // 阶段 4：统计/宠物由记录全量派生，不做增量累加
-  return { ok: true, record: rec, pet: p };
+  const rc = recomputeAll(root);   // 阶段 4：统计/宠物由记录全量派生，不做增量累加
+  return { ok: true, record: rec, pet: rc.pet, levelUp: rc.levelUp, newUnlocks: rc.newUnlocks };
 }
 
 // ===== 阶段 4：全量重算 =====
@@ -206,13 +209,26 @@ function recomputeAll(root) {
   }
 
   const p = readJson(pet, { name: '阿七', level: 1, exp: 0, totalExp: 0 });
+  const prevLevel = wt.levelFromTotalExp(p.totalExp || 0);
   p.totalExp = stats.totalExp;
   p.level = wt.levelFromTotalExp(p.totalExp);
   p.exp = wt.round1(wt.expInLevel(p.totalExp));
 
+  // 阶段 7：等级提升自动解锁道具（**只增不减** —— 补录导致降级时不回收，避免养成观感倒退）
+  const had = Array.isArray(p.unlockedItems) ? p.unlockedItems.slice() : [];
+  const earned = growth.unlocksForLevel(p.level);
+  const addedUnlocks = earned.filter((u) => !had.includes(u.id));
+  p.unlockedItems = Array.from(new Set(had.concat(earned.map((u) => u.id))));
+
   writeJson(statistics, stats);
   writeJson(pet, p);
-  return { statistics: stats, pet: p };
+  return {
+    statistics: stats,
+    pet: p,
+    prevLevel,
+    levelUp: p.level > prevLevel,
+    newUnlocks: addedUnlocks
+  };
 }
 
 // 当前状态：供渲染层显示（含实时计时）。
@@ -329,13 +345,16 @@ function repairAttendance(root, input) {
 
   att[date] = rec;
   writeJson(attendance, att);
-  const { statistics, pet } = recomputeAll(root);
+  const rc = recomputeAll(root);
   return {
     ok: true,
     record: rec,
     replaced: !!prev,
     prevStatus: prev ? prev.status : null,
-    statistics, pet
+    statistics: rc.statistics,
+    pet: rc.pet,
+    levelUp: rc.levelUp,
+    newUnlocks: rc.newUnlocks
   };
 }
 
@@ -469,6 +488,67 @@ function getReminderSettings(root) {
   return readJson(path.join(paths(root).dataDir, 'settings.json'), {});
 }
 
+// ===== 阶段 7：成长 / 互动 =====
+// 宠物状态 + 等级 + 好感度 + 解锁 + 互动次数，供「互动 / 宠物状态」窗口使用。
+function getGrowth(root) {
+  const { pet } = paths(root);
+  const p = readJson(pet, {});
+  const today = todayStr();
+  const totalExp = p.totalExp || 0;
+  const level = wt.levelFromTotalExp(totalExp);
+  const counters = growth.normalizeCounters(p.interactionsToday, today);
+  const unlocked = Array.isArray(p.unlockedItems) ? p.unlockedItems.slice() : [];
+
+  return {
+    name: p.name || '阿七',
+    level,
+    exp: wt.round1(wt.expInLevel(totalExp)),
+    expPerLevel: wt.EXP_PER_LEVEL,
+    totalExp: wt.round1(totalExp),
+    affection: Math.max(0, Math.round(p.affection || 0)),
+    interactionCount: Math.max(0, Math.round(p.interactionCount || 0)),
+    createdAt: p.createdAt || today,
+    companionDays: growth.companionDays(p.createdAt || today, today),
+    unlockedItems: unlocked,
+    unlocked: growth.unlocksForLevel(level),          // 按等级应解锁的（含名称/emoji）
+    unlockList: growth.UNLOCKS,                       // 全部道具（含未解锁的，供界面展示）
+    nextUnlock: growth.nextUnlock(level),
+    counters,
+    actions: growth.INTERACTIONS.map((it) => ({
+      key: it.key, label: it.label, emoji: it.emoji,
+      dailyLimit: it.dailyLimit,
+      remaining: growth.remainingOf(counters, it.key)
+    }))
+  };
+}
+
+// 执行一次互动：**只加好感度，不加 EXP**（README §二十二：工作时长是 EXP 的绝对核心来源）
+function interact(root, key) {
+  const { pet } = paths(root);
+  const p = readJson(pet, {});
+  const today = todayStr();
+  const counters = growth.normalizeCounters(p.interactionsToday, today);
+  const r = growth.applyInteraction(counters, key, today);
+  if (!r.ok) return { ok: false, reason: r.reason, counters };
+
+  p.interactionsToday = r.counters;
+  p.affection = Math.max(0, Math.round((p.affection || 0) + r.affectionDelta));
+  p.interactionCount = Math.max(0, Math.round((p.interactionCount || 0) + 1));
+  writeJson(pet, p);
+
+  return {
+    ok: true,
+    action: key,
+    state: r.state,
+    message: r.message,
+    affection: p.affection,
+    affectionDelta: r.affectionDelta,
+    interactionCount: p.interactionCount,
+    counters: r.counters,
+    totalExp: wt.round1(p.totalExp || 0)   // 原样返回，用于向用户证明"互动没有加 EXP"
+  };
+}
+
 // 等级/经验摘要：供托盘菜单显示等级与经验条（每次调用都读最新 pet.json）。
 function getLevelInfo(root) {
   const { pet } = paths(root);
@@ -493,5 +573,7 @@ module.exports = {
   getTodos, setTodoDone, getStats,
   // 阶段 6
   updateSettings, getReminderSettings,
+  // 阶段 7
+  getGrowth, interact,
   todayStr, yesterdayStr, nowHM
 };
