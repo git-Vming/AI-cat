@@ -34,8 +34,10 @@ html, body {
 }
 @keyframes menu-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
 
-.m-head { display: flex; align-items: baseline; gap: 5px; }
-.m-avatar { font-size: 14px; }
+.m-head { display: flex; align-items: center; gap: 5px; }
+/* 头像 = 表情原画（半身像）。刻意压到 18px 高，保证不顶高表头、不让菜单重新溢出。 */
+.m-avatar { width: 16px; height: 18px; object-fit: contain; flex: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18)); }
 .m-name { font-weight: 700; font-size: 14px; color: #252a33; }
 .m-lv { font-size: 11px; color: #7f9526; font-weight: 700; margin-left: auto; }
 

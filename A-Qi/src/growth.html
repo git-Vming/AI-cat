@@ -22,6 +22,16 @@
         <div class="title">🎒 宠物状态</div>
         <div class="sub">阿七现在怎么样</div>
       </div>
+      <!-- 2026-10-07：用《阿七形象资产》原画显示"当前心情 + 当前场景"。
+           心情 = 表情设定（半身像）；场景 = 场景互动（带背景的插图）。 -->
+      <div class="hero">
+        <img class="hero-mood" id="hero-mood" src="../assets/pet/expr_normal.png" alt="阿七当前心情" />
+        <div class="hero-txt">
+          <div class="hero-state" id="hero-state">—</div>
+          <div class="hero-hint" id="hero-hint">—</div>
+        </div>
+      </div>
+      <img class="hero-scene" id="hero-scene" src="../assets/pet/scene_work.png" alt="阿七当前场景" />
       <div class="rows" id="status-rows"></div>
       <div class="unlock-head">升级解锁</div>
       <div class="unlocks" id="unlocks"></div>

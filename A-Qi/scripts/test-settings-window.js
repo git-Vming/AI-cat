@@ -25,7 +25,13 @@ function makeEl(id) {
       add: (c) => classes.add(c),
       remove: (c) => classes.delete(c),
       contains: (c) => classes.has(c),
-      toggle: (c) => (classes.has(c) ? classes.delete(c) : classes.add(c))
+      // 必须支持 force 参数：真实 DOM 里 toggle(c,false) 是【移除】（踩过）
+      toggle: (c, force) => {
+        if (force === undefined) {
+          if (classes.has(c)) classes.delete(c); else classes.add(c);
+        } else if (force) classes.add(c); else classes.delete(c);
+        return classes.has(c);
+      }
     },
     get innerHTML() { return this._html; },
     set innerHTML(v) { this._html = String(v); if (v === '') this.children = []; },
@@ -42,7 +48,7 @@ function fire(el, type, ev) {
   (el.__listeners[type] || []).slice().forEach((fn) => fn(ev));
 }
 
-const IDS = ['pet-name', 'btn-name', 'always-on-top', 'pos-text', 'btn-reset-pos',
+const IDS = ['pet-name', 'btn-name', 'always-on-top', 'size-large', 'size-small', 'pos-text', 'btn-reset-pos',
   'reminders', 'eye-min', 'sit-min', 'start-on-boot', 'data-dir', 'btn-open-dir',
   'data-summary', 'last-backup', 'btn-backup', 'backups', 'ver', 'toast'];
 
@@ -242,6 +248,46 @@ const STATE = {
   check('settings.html 含阶段 9 全部设置项',
     ['pet-name', 'always-on-top', 'reminders', 'eye-min', 'sit-min',
       'start-on-boot', 'btn-backup', 'btn-reset-pos'].every((id) => html.indexOf('id="' + id + '"') >= 0));
+
+  // ---------- ⑨ 宠物大小（2026-10-07 新增：大 / 小 = 一半） ----------
+  // 放在最后，避免污染前面用例共用的 calls / DOM 状态
+  {
+    const env = loadEnv(STATE);
+    // HTML 里两个按钮带 data-size；桩不会解析 HTML，这里手工补上（等价真实 DOM）
+    env.els['size-large'].dataset.size = 'large';
+    env.els['size-small'].dataset.size = 'small';
+    await tick();
+    const S = env.els;
+    check('宠物大小未设置时默认高亮「大」',
+      S['size-large'].classList.contains('active') && !S['size-small'].classList.contains('active'));
+
+    fire(S['size-small'], 'click', {});
+    await tick();
+    const patch = env.calls.save[env.calls.save.length - 1];
+    check('点「小」→ 保存 petSize=small', patch && patch.petSize === 'small', JSON.stringify(patch));
+    check('patch 只含 petSize 一个字段（不误改其它设置）',
+      patch && Object.keys(patch).length === 1, JSON.stringify(patch));
+
+    fire(S['size-large'], 'click', {});
+    await tick();
+    const patch2 = env.calls.save[env.calls.save.length - 1];
+    check('点「大」→ 保存 petSize=large', patch2 && patch2.petSize === 'large', JSON.stringify(patch2));
+  }
+  {
+    const env2 = loadEnv(Object.assign({}, STATE, {
+      settings: Object.assign({}, STATE.settings, { petSize: 'small' })
+    }));
+    await tick();
+    check('已是 small → 高亮「小」、不再高亮「大」',
+      env2.els['size-small'].classList.contains('active')
+      && !env2.els['size-large'].classList.contains('active'));
+  }
+  {
+    const html2 = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.html'), 'utf8');
+    check('settings.html 含宠物大小两个按钮（data-size=large/small）',
+      /id="size-large"[^>]*data-size="large"|data-size="large"[^>]*id="size-large"/.test(html2)
+      && /id="size-small"[^>]*data-size="small"|data-size="small"[^>]*id="size-small"/.test(html2));
+  }
 
   console.log('\n结果：' + pass + ' 通过 / ' + fail + ' 失败');
   process.exit(fail === 0 ? 0 : 1);

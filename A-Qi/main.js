@@ -20,6 +20,20 @@ const wr = require('./src/work-record');
 const tf = require('./src/tray-format');
 const rm = require('./src/reminder');
 const growth = require('./src/growth');
+const pl = require('./src/pet-look');   // 2026-10-07：原画"该看哪张"的显示逻辑（纯函数）
+
+// ===== 桌面宠物大小（PM 2026-10-07 要求）=====
+// 只影响桌面宠物的**显示比例与窗口尺寸**，不改动任何功能。
+// 'small' 定义为 'large' 的**一半比例**（180×200 → 90×100）。
+// 渲染层 .pet 用百分比铺满窗口，所以窗口一缩，猫就等比缩小一半。
+const PET_SIZES = { large: { w: 180, h: 200 }, small: { w: 90, h: 100 } };
+function currentPetSize() {
+  try {
+    const s = getSettingsSummary(getAppRoot());
+    return PET_SIZES[s.petSize] ? s.petSize : 'large';
+  } catch (_) { return 'large'; }
+}
+function petSizePx() { return PET_SIZES[currentPetSize()]; }
 
 let mainWindow = null;
 let tray = null;
@@ -85,9 +99,10 @@ function createWindow() {
   ensureDataLayer(root); // 阶段 1：初始化 data/ WorkRecords/ backup/ 与默认 JSON
   logLine('[main] createWindow');
 
+  const psz = petSizePx();
   mainWindow = new BrowserWindow({
-    width: 180,
-    height: 200,
+    width: psz.w,
+    height: psz.h,
     show: false,         // 阶段 8：先恢复桌面位置再显示，避免启动瞬间闪一下
     transparent: true,   // 透明背景
     frame: false,        // 无边框
@@ -446,15 +461,68 @@ function hideBubble() {
 let lastAction = null;        // 'pat' | 'feed' | 'water' | 'play' | 'levelup'
 let lastActionAt = null;
 
-function currentPetState() {
-  let st = null;
-  try { st = getStatus(getAppRoot()); } catch (_) {}
+function currentPetState(statusIn) {
+  let st = statusIn || null;
+  if (!st) { try { st = getStatus(getAppRoot()); } catch (_) {} }
   return growth.computeState({
     working: !!(st && st.working),
     bubbleShown: bubbleVisible(),
     lastAction,
     lastActionAt
   }, new Date());
+}
+
+// ===== 2026-10-07：原画显示逻辑（桌面动作 / 心情头像 / 当前场景）=====
+// 「有没有忘记打卡没处理」用于心情头像（有点生气）。每次判断都要读盘，故做 60 秒缓存。
+let repairPendingCache = { at: 0, val: false };
+function hasPendingRepair() {
+  const now = Date.now();
+  if (now - repairPendingCache.at > 60000) {
+    let v = false;
+    try { v = findPendingRepairs(getAppRoot()).length > 0; } catch (_) {}
+    repairPendingCache = { at: now, val: v };
+  }
+  return repairPendingCache.val;
+}
+function petLookContext(statusIn) {
+  let st = statusIn || null;
+  if (!st) { try { st = getStatus(getAppRoot()); } catch (_) {} }
+  const celebrate = lastAction === 'levelup' && lastActionAt
+    && (Date.now() - new Date(lastActionAt).getTime()) < 20000;
+  return {
+    state: currentPetState(st),
+    lunch: !!(st && st.state === 'LUNCH_BREAK'),   // 工作日午休 12:00–14:00
+    completedToday: !!(st && st.completed),        // 今日已下工
+    celebrate,                                     // 刚升级（20 秒内）
+    lastAction,
+    repairPending: hasPendingRepair()
+  };
+}
+function currentPetLook(statusIn) {
+  const ctx = petLookContext(statusIn);
+  return { pose: pl.pickPose(ctx), mood: pl.pickMood(ctx), scene: pl.pickScene(ctx), state: ctx.state };
+}
+
+// 应用桌面宠物大小：改窗口尺寸，并保持"猫的中心点"不动（切换后不会跳走）。
+// 渲染层的 .pet 用百分比铺满窗口 → 窗口一缩，形象等比缩小一半，无需另写缩放代码。
+// 兜底：万一某平台下不可缩放窗口不接受编程改尺寸，就通知渲染层退化为"只缩放形象"。
+function applyPetSize(size, opts) {
+  const key = PET_SIZES[size] ? size : 'large';
+  const t = PET_SIZES[key];
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, reason: 'no_window' };
+  let resized = false;
+  try {
+    const b = mainWindow.getBounds();
+    const x = Math.round(b.x + (b.width - t.w) / 2);
+    const y = Math.round(b.y + (b.height - t.h) / 2);
+    mainWindow.setBounds({ x, y, width: t.w, height: t.h });
+    const nb = mainWindow.getBounds();
+    resized = (nb.width === t.w && nb.height === t.h);
+  } catch (e) { logLine('[pet-size] setBounds failed: ' + (e && e.message)); }
+  try { mainWindow.webContents.send('aqi:pet-size', { size: key, resized }); } catch (_) {}
+  if (resized && !(opts && opts.keepPosition)) saveMainPosition();
+  logLine('[pet-size] ' + key + ' -> ' + t.w + 'x' + t.h + ' resized=' + resized);
+  return { ok: true, size: key, resized };
 }
 
 function createGrowthWindow() {
@@ -751,9 +819,13 @@ function resetPositionToCenter() {
 // 避免每秒重建 SVG 打断 CSS 动画。
 function pushPetState() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  let st = 'IDLE';
-  try { st = currentPetState(); } catch (_) {}
-  try { mainWindow.webContents.send('aqi:pet-state', st); } catch (_) {}
+  let st = null;
+  try { st = getStatus(getAppRoot()); } catch (_) {}
+  let stateName = 'IDLE';
+  try { stateName = currentPetState(st); } catch (_) {}
+  try { mainWindow.webContents.send('aqi:pet-state', stateName); } catch (_) {}
+  // 2026-10-07：同时推送"该显示哪张原画"（动作 / 心情 / 场景）
+  try { mainWindow.webContents.send('aqi:pet-look', currentPetLook(st)); } catch (_) {}
 }
 
 function startPetStateTimer() {
@@ -928,7 +1000,13 @@ ipcMain.on('aqi:drag', (e, dx, dy) => {
 ipcMain.on('aqi:log', (e, msg) => logLine(`[renderer] ${msg}`));
 
 // ===== 阶段 2：上工 / 下工 / 状态 查询 =====
-ipcMain.handle('aqi:get-status', () => getStatus(getAppRoot()));
+ipcMain.handle('aqi:get-status', () => {
+  const st = getStatus(getAppRoot());
+  // 2026-10-07：菜单顶栏头像用「心情表情原画」，随状态变化
+  let mood = 'normal';
+  try { mood = pl.pickMood(petLookContext(st)); } catch (_) {}
+  return Object.assign({}, st, { mood });
+});
 ipcMain.handle('aqi:punch-in', () => {
   const r = punchIn(getAppRoot());
   if (r.ok) resetReminderState('punch-in');   // 阶段 6
@@ -988,10 +1066,14 @@ ipcMain.on('aqi:close-todo', () => closeTodoWindow());
 // ===== 阶段 7：成长 / 互动 =====
 ipcMain.handle('aqi:get-growth', () => {
   const st = currentPetState();
+  const look = currentPetLook();
   return Object.assign({}, getGrowth(getAppRoot()), {
     state: st,
     stateText: growth.stateText(st),
-    stateEmoji: growth.stateEmoji(st)
+    stateEmoji: growth.stateEmoji(st),
+    // 2026-10-07：宠物状态窗用「心情表情原画」做头像、「场景互动原画」做当前场景插图
+    mood: look.mood,
+    scene: look.scene
   });
 });
 
@@ -1043,6 +1125,8 @@ ipcMain.handle('aqi:save-settings', (e, patch) => {
   let loginItem = null;
   if (has('alwaysOnTop')) applyAlwaysOnTop(p.alwaysOnTop);
   if (has('startOnBoot')) loginItem = applyLoginItem(p.startOnBoot).openAtLogin;
+  // 2026-10-07：宠物大小（只改显示比例与窗口尺寸，不动功能）
+  if (has('petSize')) applyPetSize(p.petSize);
   // 提醒相关改动 → 档位归零，按新间隔重新计时
   if (has('remindersEnabled') || has('eyeReminderMin') || has('sitReminderMin')) resetReminderState('settings');
   refreshTrayMenu();

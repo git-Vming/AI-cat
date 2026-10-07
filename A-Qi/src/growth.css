@@ -106,3 +106,36 @@ button.ghost:hover { background: #eef3fb; }
 .result.ok { color: #3aa76d; }
 .result.err { color: #d9534f; }
 .result b { color: #252a33; }
+
+/* ===== 2026-10-07：当前心情（表情原画）+ 当前场景（场景互动原画）===== */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.hero-mood {
+  width: 64px;
+  height: 76px;
+  object-fit: contain;      /* 表情原画是半身像，等比显示不裁切 */
+  flex: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.18));
+}
+.hero-txt { min-width: 0; }
+.hero-state { font-size: 14px; font-weight: 700; color: #252a33; }
+.hero-hint { margin-top: 3px; font-size: 11.5px; color: #6b7480; line-height: 1.5; }
+.hero-scene {
+  display: block;
+  width: 100%;
+  height: 152px;
+  object-fit: cover;              /* 场景原画是方形插图，裁成横幅当"当前场景" */
+  object-position: center 40%;
+  border-radius: 12px;
+  border: 1px solid #e3e9f2;
+  margin-bottom: 10px;
+  background: #eef2f7;
+}

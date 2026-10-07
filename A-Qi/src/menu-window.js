@@ -13,6 +13,7 @@ window.addEventListener('error', (e) =>
 log('booted; aqi=' + (!!window.aqi));
 
 const el = {
+  avatar: document.getElementById('m-avatar'),
   name: document.getElementById('m-name'),
   lv: document.getElementById('m-lv'),
   expFill: document.getElementById('m-expfill'),
@@ -35,6 +36,16 @@ function render(s) {
   cur = s;
   el.name.textContent = s.name || '阿七';
   el.lv.textContent = 'Lv.' + (s.level || 1);
+
+  // 头像 = 《阿七形象资产》表情原画（随心情变化；主进程在 aqi:get-status 里附带 mood）
+  if (el.avatar) {
+    const moods = ['normal', 'happy', 'surprise', 'shy', 'sleepy', 'angry', 'sad', 'tilt'];
+    const mood = moods.indexOf(s.mood) >= 0 ? s.mood : 'normal';
+    const src = '../assets/pet/expr_' + mood + '.png';
+    if (!el.avatar.getAttribute('src') || el.avatar.getAttribute('src').indexOf('expr_' + mood) < 0) {
+      el.avatar.src = src;
+    }
+  }
 
   const need = s.expPerLevel || 80;
   const inLv = Math.max(0, Math.min(s.exp || 0, need));

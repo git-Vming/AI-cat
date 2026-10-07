@@ -1,17 +1,20 @@
 // 渲染层：阿七本体显示、拖动、点击开菜单、显隐淡入淡出
 //
 // 2026-10-07 改版（PM 指示）：
-//   阿七本体改为【直接使用原画贴图】assets/pet/aqi.png（透明底立绘）。
-//   本脚本**不再绘制、不再重绘、也不做任何表情/姿态映射与随机小动作** ——
-//   PM 明确要求"先就贴图，不写动态"，且"不可以自己修改形象原画"。
-//   原画 → 屏幕的链路只有一条：index.html 里的 <img src="../assets/pet/aqi.png">。
-//   等形象确认无误后，再单独讨论怎么让它动起来。
+//   阿七本体 = 【《阿七形象资产》原画贴图】，程序**不绘制、不重绘、不改画**。
+//   形象 → 屏幕的链路只有一条：index.html 里的 <img> 换 src。
+//
+//   本脚本负责两件事：
+//     ① 按主进程推来的 aqi:pet-look 切换「显示哪张原画动作」（pose_*.png）；
+//     ② 响应 aqi:pet-size（宠物大小设置）—— 正常情况窗口已由主进程改尺寸、
+//        .pet 用百分比自动等比缩放，这里只在"窗口没能改尺寸"时做兜底缩放。
+//   【没有任何自写动画】：不呼吸、不摇晃、不抖动（PM 反馈"动作都是抖动"）。
+//   动作的变化只来自"换原画"，而换图时机是事件驱动的（午休/提醒/互动/升级/下工…）。
 //
 // 保留（这些是交互，不是"动态"）：
 //   · 拖动移动窗口 + 拖动结束记住位置（规格 §35）
 //   · 左键单击 / 右键 → 菜单；气泡显示中单击优先关气泡（阶段 6 决策）
 //   · 隐藏/显示淡出淡入（阶段 8）
-//   · 宠物状态仍照旧接收，但只写入 data-state 供调试与后续使用，不做视觉变化
 //
 // ⚠️ 关键教训（阶段 2 拖动/点击全失效的根因）：
 //   preload 用 contextBridge.exposeInMainWorld('aqi', …) 注入的全局 `aqi` 是「不可配置」属性；
@@ -21,6 +24,7 @@
 //   （而图片照常显示，极具迷惑性）。
 //   因此本地引用统一改名为 `api`，绝不与全局名冲突。
 const pet = document.getElementById('pet');
+const petImg = document.getElementById('pet-img');
 const api = window.aqi || null;   // ← 别名，勿改回 aqi
 
 // ===== 诊断日志：写入 <A-Qi>/diag.log，便于无 GUI 环境下定位问题 =====
@@ -36,10 +40,8 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 log('renderer booted; aqi=' + (!!window.aqi) + '; pet=' + (!!pet));
 
-// ===== 宠物状态（只记录，不做视觉变化）=====
-// 状态仍由主进程 growth.computeState 判定后推来（IDLE/WORKING/HAPPY/SLEEP/…）。
-// 当前形象是原画静态贴图，没有对应的各状态图，所以这里只把状态写进 DOM 属性，
-// 方便排查、也为"下一步让它动起来"预留挂载点。
+// ===== 宠物状态（只记录到 data-state，方便排查）=====
+// 状态由主进程 growth.computeState 判定后推来（IDLE/WORKING/HAPPY/SLEEP/…）。
 let curState = 'IDLE';
 function setState(state) {
   const s = typeof state === 'string' && state ? state : 'IDLE';
@@ -47,6 +49,45 @@ function setState(state) {
   curState = s;
   if (pet) pet.dataset.state = s;
   if (changed) log('state -> ' + s);
+}
+
+// ===== 原画显示：主进程推来"该看哪张动作" =====
+// pose 取值来自 src/pet-look.js（sit/walk/lie/sleep/stretch/drink/eat/levelup）。
+const POSE_LIST = (window.PetLook && window.PetLook.POSES) || ['sit'];
+const ASSET_DIR = '../assets/pet/';
+let curPose = null;
+function poseUrl(pose) {
+  return ASSET_DIR + 'pose_' + pose + '.png';
+}
+function applyLook(look) {
+  if (!petImg || !look) return;
+  const pose = POSE_LIST.indexOf(look.pose) >= 0 ? look.pose : 'sit';
+  if (pose === curPose) return;                 // 只在变化时换图，避免无谓重载
+  curPose = pose;
+  petImg.src = poseUrl(pose);
+  if (pet) pet.dataset.pose = pose;
+  if (look.mood && pet) pet.dataset.mood = look.mood;
+  log('look -> ' + pose + '（mood=' + (look.mood || '-') + '）');
+}
+if (api && api.onPetLook) api.onPetLook((look) => applyLook(look));
+
+// 预热所有动作原画，切换时不会闪一下白
+(function preloadPoses() {
+  if (typeof Image === 'undefined') return;
+  POSE_LIST.forEach((p) => { try { const i = new Image(); i.src = poseUrl(p); } catch (_) {} });
+})();
+
+// ===== 宠物大小（设置项）：只在"窗口没能改尺寸"时兜底缩放 =====
+if (api && api.onPetSize) {
+  api.onPetSize((info) => {
+    const small = !!(info && info.size === 'small' && !info.resized);
+    try {
+      if (document.body && document.body.classList) {
+        document.body.classList.toggle('pet-small-fallback', small);
+      }
+    } catch (_) {}
+    log('pet-size -> ' + ((info && info.size) || '?') + ' resized=' + !!(info && info.resized));
+  });
 }
 
 // 升级通知：主进程侧本来就会弹升级气泡（announceLevelUp），这里只记录

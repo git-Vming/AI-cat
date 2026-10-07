@@ -6,16 +6,20 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- 阿七本体：【直接使用原画贴图】assets/pet/aqi.png（透明底立绘）。
-       原画不走任何程序重绘 —— 程序只负责把它显示出来、拖动、点击、显隐。
-       窗口保持 180×200 不变；点击弹出的菜单是【独立小窗】，
-       不在此窗口内展开，避免加大透明区域挡住桌面（规格 §35）。
+  <!-- 阿七本体：【直接使用原画贴图】assets/pet/pose_*.png（《阿七形象资产》·动作设定）。
+       程序只负责"显示哪一张 + 拖动 + 点击 + 显隐"，绝不重绘形象。
+       默认显示 pose_sit.png；主进程推送 aqi:pet-look 后会切到对应动作。
 
-       2026-10-07 PM 指示：先"就贴图"，不写动态；形象正确写入后再考虑让它动起来。 -->
+       2026-10-07 PM 指示：
+         · 不可以自己修改形象原画 → 全部图片均为原画裁切，未经重绘
+         · 先就贴图（已按状态/事件切换原画，但不做呼吸/抖动等自写动画）
+         · 增加"宠物大小"设置：窗口缩小一半 → .pet 用百分比铺满 → 形象等比缩小一半 -->
+
   <div id="pet" class="pet" title="阿七">
-    <img class="pet-img" id="pet-img" src="../assets/pet/aqi.png" alt="阿七" draggable="false" />
+    <img class="pet-img" id="pet-img" src="../assets/pet/pose_sit.png" alt="阿七" draggable="false" />
   </div>
 
+  <script src="pet-look.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

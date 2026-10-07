@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld('aqi', {
   savePosition: () => ipcRenderer.send('aqi:save-position'),
   // 隐藏/显示时的淡出淡入（由渲染层做 CSS 过渡，避开窗口透明度 API 的平台差异）
   onWindowFade: (cb) => ipcRenderer.on('aqi:window-fade', (e, dir) => cb(dir)),
+  // 2026-10-07：原画显示逻辑 —— 主进程推「该显示哪张动作/心情/场景」
+  onPetLook: (cb) => ipcRenderer.on('aqi:pet-look', (e, look) => cb(look)),
+  // 2026-10-07：桌面宠物大小变更（size: 'large'|'small'；resized 表示窗口是否真的改了尺寸）
+  onPetSize: (cb) => ipcRenderer.on('aqi:pet-size', (e, info) => cb(info)),
   // 阶段 9：设置 / 备份恢复 / 位置
   getSettingsState: () => ipcRenderer.invoke('aqi:get-settings-state'),
   saveSettings: (patch) => ipcRenderer.invoke('aqi:save-settings', patch),

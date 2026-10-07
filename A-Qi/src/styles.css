@@ -1,8 +1,8 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
-  width: 180px;
-  height: 200px;
+  width: 100%;
+  height: 100%;
   background: transparent;   /* 桌面宠物必须透明 */
   overflow: hidden;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -10,26 +10,34 @@ html, body {
 }
 
 /* ===== 阿七本体 =====
-   2026-10-07 改版：本体改为【原画贴图】assets/pet/aqi.png，程序不再绘制。
-   PM 明确要求"先就贴图，不写动态" —— 因此这里【不含任何动画】：
-   不做呼吸、不摇晃、不抖动，就是一张静止的原画。
-   （只保留"隐藏/显示"的淡出淡入与鼠标悬停放大，二者是交互反馈，不是形象动态。）
+   本体 = 《阿七形象资产》原画贴图（assets/pet/pose_*.png），程序不绘制、不重绘。
 
-   拖动/点击都由 app.js 用 pointer 事件在 JS 里实现（不挂 -webkit-app-region，
+   · 尺寸用【百分比】铺满窗口 —— 这样"宠物大小"设置只要改窗口尺寸，形象就等比缩放：
+       大 = 窗口 180×200 → 形象约 170×188
+       小 = 窗口  90×100 → 形象约  85× 94（正好一半）
+   · 这里【没有任何自写动画】：不做呼吸、不摇晃、不抖动（PM 反馈"动作都是抖动"）。
+     动作的变化只来自"换原画"（主进程按状态/事件决定显示哪一张）。
+   · 保留的 transform 过渡只用于"隐藏/显示"与鼠标悬停反馈。
+
+   拖动/点击由 app.js 用 pointer 事件在 JS 里实现（不挂 -webkit-app-region，
    否则 OS 会把区域当非客户区、吞掉 mouseup/click，导致"能拖不能点"）。 */
 .pet {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  /* 尺寸按原画宽高比 627:777 ≈ 1:1.239 设定，图片不变形 */
-  width: 148px;
-  height: 184px;
+  width: 94%;
+  height: 94%;
   cursor: grab;
   transition: transform 0.15s ease, opacity 0.16s ease;
   touch-action: none;            /* 禁止浏览器默认手势，事件全交给我们 */
   -webkit-user-drag: none;       /* 禁止元素级拖拽（图片拖影） */
 }
+
+/* 兜底：万一某平台下"不可缩放窗口"不接受编程改尺寸（main.js 会回报 resized=false），
+   则由渲染层直接把形象缩到一半 —— 视觉效果一致，只是窗口本身没变小。 */
+body.pet-small-fallback .pet { width: 47%; height: 47%; }
+
 /* 隐藏/显示动画（规格 §35「可隐藏」+ 阶段 8「隐藏/显示动画」）：
    淡出由渲染层 CSS 完成，主进程等过渡结束再真正 hide ——
    不用窗口透明度 API，避免 transparent 窗口在各平台的差异。 */

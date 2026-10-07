@@ -72,7 +72,43 @@ function reasonText(code) {
 }
 
 // ---------- 宠物状态 ----------
+// 2026-10-07：顶部用《阿七形象资产》原画显示"当前心情"（表情设定）与"当前场景"（场景互动）
+const elHeroMood = document.getElementById('hero-mood');
+const elHeroScene = document.getElementById('hero-scene');
+const elHeroState = document.getElementById('hero-state');
+const elHeroHint = document.getElementById('hero-hint');
+
+const MOOD_LIST = ['normal', 'happy', 'surprise', 'shy', 'sleepy', 'angry', 'sad', 'tilt'];
+const SCENE_LIST = ['work', 'stretch', 'drink', 'eat'];
+// 心情 → 一句人话，让"头像换了一张脸"有解释
+const MOOD_TEXT = {
+  normal: '阿七安安静静地看着你',
+  happy: '阿七现在很开心',
+  surprise: '阿七在提醒你注意身体',
+  shy: '阿七被摸头了，有点害羞',
+  sleepy: '阿七困了',
+  angry: '阿七有点小情绪（有几天忘记打卡还没补哦）',
+  sad: '阿七有点没精神',
+  tilt: '阿七歪着头看你，等你安排今天的活'
+};
+const SCENE_TEXT = {
+  work: '正在你旁边一起工作',
+  stretch: '歇一会儿，伸个懒腰',
+  drink: '记得喝水哦',
+  eat: '正在吃饭，补充能量'
+};
+
+function renderHero(d) {
+  const mood = MOOD_LIST.indexOf(d.mood) >= 0 ? d.mood : 'normal';
+  const scene = SCENE_LIST.indexOf(d.scene) >= 0 ? d.scene : 'work';
+  if (elHeroMood) elHeroMood.src = '../assets/pet/expr_' + mood + '.png';
+  if (elHeroScene) elHeroScene.src = '../assets/pet/scene_' + scene + '.png';
+  if (elHeroState) elHeroState.textContent = `${d.stateEmoji || ''} ${d.stateText || ''}`.trim();
+  if (elHeroHint) elHeroHint.textContent = (MOOD_TEXT[mood] || '') + '　·　' + (SCENE_TEXT[scene] || '');
+}
+
 function renderStatus(d) {
+  renderHero(d);
   const rows = [
     ['状态', `${d.stateEmoji || ''} ${d.stateText || ''}`.trim(), 'accent'],
     ['等级', `Lv.${d.level}（${(d.exp || 0).toFixed(1)}/${d.expPerLevel}）`, ''],

@@ -16,6 +16,8 @@ const el = {
   name: document.getElementById('pet-name'),
   nameBtn: document.getElementById('btn-name'),
   top: document.getElementById('always-on-top'),
+  sizeLarge: document.getElementById('size-large'),
+  sizeSmall: document.getElementById('size-small'),
   pos: document.getElementById('pos-text'),
   resetPos: document.getElementById('btn-reset-pos'),
   reminders: document.getElementById('reminders'),
@@ -80,6 +82,11 @@ function render() {
   el.pos.textContent = s.position
     ? `(${s.position.x}, ${s.position.y})`
     : '未记录（默认位置）';
+
+  // 宠物大小：'large'（默认）/ 'small'（一半）——高亮当前选中的那个
+  const size = (s.petSize === 'small') ? 'small' : 'large';
+  if (el.sizeLarge) el.sizeLarge.classList.toggle('active', size === 'large');
+  if (el.sizeSmall) el.sizeSmall.classList.toggle('active', size === 'small');
 
   const info = state.appInfo || {};
   el.dataDir.textContent = info.dataDir || '—';
@@ -177,6 +184,16 @@ async function save(patch) {
 
 // ===== 各控件 =====
 el.top.addEventListener('change', () => save({ alwaysOnTop: el.top.checked }));
+
+// 宠物大小：大 / 小（一半）。只改显示比例与窗口尺寸，不动功能。
+[el.sizeLarge, el.sizeSmall].forEach((btn) => {
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const size = btn.dataset.size === 'small' ? 'small' : 'large';
+    if (state && state.settings && state.settings.petSize === size) return;  // 没变就不写盘
+    save({ petSize: size });
+  });
+});
 el.reminders.addEventListener('change', () => save({ remindersEnabled: el.reminders.checked }));
 el.eye.addEventListener('change', () => save({ eyeReminderMin: clampInt(el.eye.value, 60) }));
 el.sit.addEventListener('change', () => save({ sitReminderMin: clampInt(el.sit.value, 90) }));

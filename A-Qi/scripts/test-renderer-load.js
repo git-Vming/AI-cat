@@ -35,7 +35,14 @@ function makeEl(id) {
       add: (c) => classes.add(c),
       remove: (c) => classes.delete(c),
       contains: (c) => classes.has(c),
-      toggle: (c) => (classes.has(c) ? classes.delete(c) : classes.add(c))
+      // 注意：必须支持第二个参数 force —— 真实 DOM 里 toggle(c,false) 是【移除】，
+      //   只写 toggle:(c)=>… 会让 toggle(c,false) 反而把类加上（踩过）。
+      toggle: (c, force) => {
+        if (force === undefined) {
+          if (classes.has(c)) classes.delete(c); else classes.add(c);
+        } else if (force) classes.add(c); else classes.delete(c);
+        return classes.has(c);
+      }
     },
     dataset: {}, style: {}, textContent: '', innerHTML: '',
     addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
@@ -55,11 +62,13 @@ function fire(el, type, ev) {
   }
 }
 
-const els = { pet: makeEl('pet') };
+const petImgEl = makeEl('pet-img');
+const bodyEl = makeEl('body');
+const els = { pet: makeEl('pet'), 'pet-img': petImgEl, body: bodyEl };
 
 // ---------- 桥桩 ----------
 const calls = { drag: 0, savePosition: 0, toggleMenu: 0, openMenu: 0, levelUpCb: 0 };
-let petStateCb = null;
+let petStateCb = null, petLookCb = null, petSizeCb = null;
 let dismissResult = false;
 const apiStub = {
   log: () => {},
@@ -70,13 +79,15 @@ const apiStub = {
   dismissBubble: async () => dismissResult,
   getPetState: async () => 'IDLE',
   onPetState: (cb) => { petStateCb = cb; },
+  onPetLook: (cb) => { petLookCb = cb; },
+  onPetSize: (cb) => { petSizeCb = cb; },
   onLevelUp: (cb) => { calls.levelUpCb++; if (cb) cb; }
 };
 
 const win = { aqi: apiStub, addEventListener: () => {} };
 const sandbox = {
   window: win,
-  document: { getElementById: (id) => els[id] || null },
+  document: { getElementById: (id) => els[id] || null, body: bodyEl },
   console: { log: () => {}, error: () => {}, warn: () => {} },
   setTimeout: () => 0, clearTimeout: () => {},
   setInterval: () => 0, clearInterval: () => {},
@@ -101,7 +112,14 @@ catch (e) { probeErr = e.name + ': ' + e.message; }
 check('上下文可复现 `const aqi` 与不可配置全局 aqi 的冲突（证明本测试有效）',
   /SyntaxError/.test(probeErr) && /already been declared/.test(probeErr), probeErr || '未报错');
 
-// ---------- ② 加载真实 app.js ----------
+// ---------- ② 加载真实 pet-look.js + app.js（与 index.html 的加载顺序一致）----------
+const lookSrc = fs.readFileSync(path.join(ROOT, 'src', 'pet-look.js'), 'utf8');
+let lookErr = '';
+try { vm.runInContext(lookSrc, sandbox, { filename: 'pet-look.js' }); }
+catch (e) { lookErr = e.name + ': ' + e.message; }
+check('src/pet-look.js 能在渲染上下文执行并挂到 window.PetLook',
+  lookErr === '' && !!win.PetLook, lookErr || '未挂载');
+
 const src = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
 let loadErr = '';
 try { vm.runInContext(src, sandbox, { filename: 'app.js' }); }
@@ -167,18 +185,21 @@ check('宠物状态写入 data-state 供调试（初始 IDLE）',
   check('气泡显示中单击阿七 → 只关气泡、不弹菜单',
     calls.toggleMenu === before, 'toggleMenu=' + calls.toggleMenu + ' (期望 ' + before + ')');
 
-  // ---------- ⑩ index.html：原画贴图 + 只加载 app.js ----------
+  // ---------- ⑩ index.html：原画贴图 + 加载 pet-look.js ----------
   const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
   check('index.html 引用 app.js', /app\.js/.test(html));
   check('index.html 不再加载 pet-svg.js（不再程序化绘制）', !/pet-svg\.js/.test(html));
-  check('index.html 用 <img> 直接引用原画 assets/pet/aqi.png',
-    /<img[^>]+src="\.\.\/assets\/pet\/aqi\.png"/.test(html), '未找到原画 img');
-  check('原画文件确实存在（assets/pet/aqi.png）',
-    fs.existsSync(path.join(ROOT, 'assets', 'pet', 'aqi.png')));
+  check('index.html 加载 pet-look.js（显示逻辑模块）', /pet-look\.js/.test(html));
+  check('index.html 用 <img> 直接引用动作原画 pose_sit.png',
+    /<img[^>]+src="\.\.\/assets\/pet\/pose_sit\.png"/.test(html), '未找到原画 img');
+  check('原画文件确实存在（assets/pet/pose_sit.png）',
+    fs.existsSync(path.join(ROOT, 'assets', 'pet', 'pose_sit.png')));
   check('index.html 不再包含旧状态卡（card 已由独立菜单窗取代）', !/id="card"/.test(html));
   const menuHtml = fs.readFileSync(path.join(ROOT, 'src', 'menu.html'), 'utf8');
   check('menu.html 引用的是窗口脚本 menu-window.js（不与纯逻辑同名）',
     /menu-window\.js/.test(menuHtml) && !/src="menu\.js"/.test(menuHtml));
+  check('menu.html 头像改用表情原画（expr_normal.png）',
+    /expr_normal\.png/.test(menuHtml));
 
   // ---------- ⑪ styles.css：形象必须是"静止原画"（PM：不写动态） ----------
   const css = fs.readFileSync(path.join(ROOT, 'src', 'styles.css'), 'utf8');
@@ -189,6 +210,31 @@ check('宠物状态写入 data-state 供调试（初始 IDLE）',
     /object-fit:\s*contain/.test(css));
   check('styles.css 保留了隐藏/显示过渡（阶段 8 已验收的交互）',
     /body\.fade-out\s+\.pet/.test(css));
+
+  // ---------- ⑫ 原画显示逻辑接线：主进程推 look → 渲染层换图 ----------
+  check('app.js 已订阅原画显示（api.onPetLook）', !!petLookCb);
+  petLookCb({ pose: 'eat', mood: 'happy' });
+  check('收到 aqi:pet-look → 换到对应动作原画（pose_eat.png）',
+    /pose_eat\.png/.test(String(petImgEl.src)), String(petImgEl.src));
+  check('同时写入 data-pose / data-mood（便于排查）',
+    els.pet.dataset.pose === 'eat' && els.pet.dataset.mood === 'happy',
+    els.pet.dataset.pose + '/' + els.pet.dataset.mood);
+  petLookCb({ pose: '完全不存在的姿势' });
+  check('非法动作名回退 pose_sit.png', /pose_sit\.png/.test(String(petImgEl.src)), String(petImgEl.src));
+
+  // ---------- ⑬ 宠物大小设置（大 / 小 = 一半） ----------
+  check('app.js 已订阅宠物大小（api.onPetSize）', !!petSizeCb);
+  petSizeCb({ size: 'large', resized: true });
+  check('大：不额外缩放（形象跟随窗口尺寸）', !bodyEl.classList.contains('pet-small-fallback'));
+  petSizeCb({ size: 'small', resized: true });
+  check('小：窗口已成功改尺寸 → 不额外缩放', !bodyEl.classList.contains('pet-small-fallback'));
+  petSizeCb({ size: 'small', resized: false });
+  check('小：窗口未能改尺寸 → 渲染层退化为一半缩放',
+    bodyEl.classList.contains('pet-small-fallback'));
+  petSizeCb({ size: 'large', resized: true });
+  check('切回大 → 取消兜底缩放', !bodyEl.classList.contains('pet-small-fallback'));
+  check('styles.css 有兜底缩放规则（body.pet-small-fallback .pet）',
+    /body\.pet-small-fallback\s+\.pet/.test(css));
 
   console.log('\n结果：' + pass + ' 通过 / ' + fail + ' 失败');
   process.exit(fail === 0 ? 0 : 1);
