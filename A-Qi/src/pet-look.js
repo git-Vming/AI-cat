@@ -22,7 +22,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const POSES = ['sit', 'walk', 'lie', 'sleep', 'stretch', 'drink', 'eat', 'levelup'];
+  // 2026-10-07 PM 指示：原先"上工中"只能借用 sit（动作设定里没有全身的"看电脑"姿势）。
+  // 现改为从《场景互动 2x2》左上格裁切 + 抠图得到的 work（见 assets/pet/pose_work.png）。
+  const POSES = ['sit', 'walk', 'lie', 'sleep', 'stretch', 'drink', 'eat', 'levelup', 'work'];
   const MOODS = ['normal', 'happy', 'surprise', 'shy', 'sleepy', 'angry', 'sad', 'tilt'];
   const SCENES = ['work', 'stretch', 'drink', 'eat'];
 
@@ -46,7 +48,7 @@
     if (st === 'SLEEP') return 'sleep';        // 夜间 22:00–06:00
     if (c.lunch) return 'sleep';               // 工作日午休 12:00–14:00（PM 指定）
     if (st === 'HAPPY') return 'walk';         // 摸头/玩耍后 → 开心地溜达
-    if (st === 'WORKING') return 'sit';        // 上工中（动作集里没有"看电脑"全身姿势）
+    if (st === 'WORKING') return 'work';       // 上工中 → 看电脑（PM 指定用场景图左上格的全身像）
     if (c.completedToday) return 'lie';        // 今日已下工 → 趴着歇会儿
     return 'sit';                              // 其余（待机）
   }

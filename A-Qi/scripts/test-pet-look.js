@@ -17,13 +17,15 @@ function check(name, cond, extra) {
 }
 
 console.log('— 三套原画清单 —');
-check('动作 8 张', pl.POSES.length === 8 && pl.POSES.indexOf('sit') >= 0, JSON.stringify(pl.POSES));
+check('动作 9 张（含后补的 work=看电脑）', pl.POSES.length === 9 && pl.POSES.indexOf('sit') >= 0,
+  JSON.stringify(pl.POSES));
 check('表情 8 张', pl.MOODS.length === 8 && pl.MOODS.indexOf('normal') >= 0, JSON.stringify(pl.MOODS));
 check('场景 4 张', pl.SCENES.length === 4 && pl.SCENES.indexOf('work') >= 0, JSON.stringify(pl.SCENES));
 
 console.log('— 桌面本体：动作选择（pickPose）—');
 check('默认（IDLE）→ 坐着', pl.pickPose({ state: 'IDLE' }) === 'sit');
-check('上工中（WORKING）→ 坐着（动作集无"看电脑"全身姿势）', pl.pickPose({ state: 'WORKING' }) === 'sit');
+check('★上工中（WORKING）→ 看电脑（PM 指定：取自场景互动图左上格的全身像）',
+  pl.pickPose({ state: 'WORKING' }) === 'work');
 check('互动·喂点吃的（EATING）→ 吃东西', pl.pickPose({ state: 'EATING' }) === 'eat');
 check('互动·给它喝水（DRINKING）→ 喝水', pl.pickPose({ state: 'DRINKING' }) === 'drink');
 check('护眼/久坐提醒中（REMINDING）→ 伸懒腰', pl.pickPose({ state: 'REMINDING' }) === 'stretch');
@@ -37,7 +39,7 @@ console.log('— 动作优先级（越特殊越优先）—');
 check('升级 > 吃东西', pl.pickPose({ state: 'EATING', celebrate: true }) === 'levelup');
 check('吃东西 > 午休睡觉', pl.pickPose({ state: 'EATING', lunch: true }) === 'eat');
 check('喝水 > 午休睡觉', pl.pickPose({ state: 'DRINKING', lunch: true }) === 'drink');
-check('提醒 > 上工中', pl.pickPose({ state: 'WORKING', lunch: false }) === 'sit'
+check('提醒 > 上工中', pl.pickPose({ state: 'WORKING', lunch: false }) === 'work'
   && pl.pickPose({ state: 'REMINDING' }) === 'stretch');
 
 console.log('— 动作：脏数据 / 空输入不崩 —');
@@ -99,6 +101,7 @@ check('4 种场景都能被取到', (function () {
 
 console.log('— 文件名映射 + 非法名回退 —');
 check('poseFile 正常', pl.poseFile('eat') === 'pose_eat.png');
+check('★poseFile 支持 work（否则上工中会回退成坐姿）', pl.poseFile('work') === 'pose_work.png');
 check('poseFile 非法 → pose_sit.png', pl.poseFile('nope') === 'pose_sit.png');
 check('moodFile 正常', pl.moodFile('shy') === 'expr_shy.png');
 check('moodFile 非法 → expr_normal.png', pl.moodFile('nope') === 'expr_normal.png');
@@ -112,7 +115,7 @@ console.log('— 原画文件真的都在（防止"逻辑对了但图没打包"�
   pl.POSES.forEach((n) => { if (!fs.existsSync(path.join(dir, pl.poseFile(n)))) missing.push(pl.poseFile(n)); });
   pl.MOODS.forEach((n) => { if (!fs.existsSync(path.join(dir, pl.moodFile(n)))) missing.push(pl.moodFile(n)); });
   pl.SCENES.forEach((n) => { if (!fs.existsSync(path.join(dir, pl.sceneFile(n)))) missing.push(pl.sceneFile(n)); });
-  check('8 动作 + 8 表情 + 4 场景 = 20 张原画全部存在', missing.length === 0, missing.join(', '));
+  check('9 动作 + 8 表情 + 4 场景 = 21 张原画全部存在', missing.length === 0, missing.join(', '));
 }
 
 console.log('\n结果：' + pass + ' 通过 / ' + fail + ' 失败');
