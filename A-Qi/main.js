@@ -11,7 +11,9 @@ const {
   // 阶段 6
   getReminderSettings, updateSettings,
   // 阶段 7
-  getGrowth, interact, recomputeAll
+  getGrowth, interact, recomputeAll,
+  // 阶段 9
+  getSettingsSummary, setPetName, backupData, listBackups, restoreBackup, getAppInfo
 } = require('./src/data-store');
 const wt = require('./src/work-time');
 const wr = require('./src/work-record');
@@ -27,6 +29,7 @@ let bubbleWindow = null;   // 阶段 6：提醒气泡（独立无边框小窗，
 let growthWindow = null;   // 阶段 7：互动 + 宠物状态窗口（同样用普通窗口）
 let menuWindow = null;     // 阶段 8：点击阿七弹出的功能菜单（独立无边框小窗）
 let petStateTimer = null;  // 阶段 8：宠物状态推送定时器（驱动表情/动作切换）
+let settingsWindow = null; // 阶段 9：设置窗口（普通窗口）
 
 // 数据根目录：打包后取 exe 同目录（保证数据与程序分离、整体可迁移）；
 // 开发期取项目根目录。
@@ -612,13 +615,111 @@ function handleMenuAction(act) {
     case 'stats': openTodoWindow('stats'); break;
     case 'growth': openGrowthWindow('interact'); break;
     case 'status': openGrowthWindow('status'); break;
-    case 'settings':
-      // 设置界面属阶段 9；此处给明确反馈，不留"点了没反应"
-      showWindow();
-      showBubble('⚙ 设置界面将在后续版本提供～');
-      break;
+    case 'settings': openSettingsWindow(); break;
     case 'hide': hideWindow(); break;
     default: break;
+  }
+}
+
+// ===== 阶段 9：设置窗口（规格 §37 开机启动；《开发流程》阶段 9 全部设置项）=====
+// 选型同补录/待办/互动：普通窗口（系统标题栏，能关）。
+const LOGIN_ITEM_ARGS = ['--aqi-autostart'];
+
+function createSettingsWindow() {
+  settingsWindow = new BrowserWindow({
+    width: 470,
+    height: 660,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: '设置 · 阿七',
+    autoHideMenuBar: true,
+    backgroundColor: '#17171b',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  const wc = settingsWindow.webContents;
+  wc.on('did-finish-load', () => logLine('[settings-window] did-finish-load'));
+  wc.on('did-fail-load', (e, code, desc) => logLine(`[settings-window] did-fail-load code=${code} desc=${desc}`));
+  wc.on('preload-error', (e, p, err) => logLine(`[settings-window] preload-error ${err && err.message}`));
+  wc.on('console-message', (...args) => {
+    const maybe = args[1];
+    const msg = (maybe && typeof maybe === 'object') ? maybe.message : args[2];
+    logLine(`[settings-console] ${msg}`);
+  });
+
+  settingsWindow.loadFile(path.join(__dirname, 'src', 'settings.html'));
+  settingsWindow.on('closed', () => { settingsWindow = null; logLine('[settings-window] closed'); });
+  logLine('[settings-window] created');
+}
+
+function openSettingsWindow() {
+  if (!settingsWindow || settingsWindow.isDestroyed()) createSettingsWindow();
+  const show = () => {
+    if (!settingsWindow || settingsWindow.isDestroyed()) return;
+    settingsWindow.show();
+    settingsWindow.focus();
+    logLine('[settings-window] shown');
+  };
+  if (settingsWindow.webContents.isLoading()) settingsWindow.once('ready-to-show', show);
+  else show();
+}
+
+function closeSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) settingsWindow.hide();
+}
+
+// 开机启动：开发期（electron.exe .）与打包后（A-Qi.exe）登记方式不同，分别处理。
+// 说明：规格 §37 建议默认开启，但**本实现默认关闭**，由用户在设置页显式开启 ——
+//   往用户系统写"开机自动启动"是敏感操作，不擅自替用户决定（报告第五节已说明）。
+function applyLoginItem(enabled) {
+  const on = !!enabled;
+  try {
+    if (app.isPackaged) {
+      app.setLoginItemSettings({ openAtLogin: on, args: LOGIN_ITEM_ARGS });
+    } else {
+      app.setLoginItemSettings({
+        openAtLogin: on,
+        path: process.execPath,
+        args: [path.resolve(__dirname)]
+      });
+    }
+    let real = on;
+    try { real = !!app.getLoginItemSettings().openAtLogin; } catch (_) {}
+    logLine('[settings] 开机启动 -> ' + real + (app.isPackaged ? ' (packaged)' : ' (dev)'));
+    return { ok: true, openAtLogin: real };
+  } catch (e) {
+    logLine('[settings] setLoginItemSettings failed: ' + (e && e.message));
+    return { ok: false, reason: 'io_error', message: e && e.message };
+  }
+}
+
+function applyAlwaysOnTop(v) {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(v !== false);
+    logLine('[settings] 置顶 -> ' + (v !== false));
+  } catch (e) { logLine('[settings] applyAlwaysOnTop failed: ' + (e && e.message)); }
+}
+
+function resetPositionToCenter() {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, reason: 'no_window' };
+  try {
+    const b = mainWindow.getBounds();
+    let wa = { x: 0, y: 0, width: 1920, height: 1080 };
+    try { wa = screen.getDisplayMatching(b).workArea; } catch (_) {}
+    const x = Math.round(wa.x + (wa.width - b.width) / 2);
+    const y = Math.round(wa.y + (wa.height - b.height) / 2);
+    mainWindow.setPosition(x, y);
+    saveMainPosition();
+    logLine(`[settings] 位置重置 -> ${x},${y}`);
+    return { ok: true, x, y };
+  } catch (e) {
+    return { ok: false, reason: 'io_error', message: e && e.message };
   }
 }
 
@@ -735,11 +836,7 @@ function buildTrayTemplate() {
       }
     },
     { type: 'separator' },
-    {
-      // 阶段 9 才做设置页；先给一个明确入口与反馈，避免"点了没反应"
-      label: '⚙ 设置',
-      click: () => { showWindow(); showBubble('⚙ 设置界面将在后续版本提供～'); }
-    },
+    { label: '⚙ 设置', click: () => openSettingsWindow() },
     { type: 'separator' },
     { label: '退出', click: () => { logLine('[tray] 退出'); app.quit(); } },
     { type: 'separator' },
@@ -901,6 +998,72 @@ ipcMain.on('aqi:close-menu', () => hideMenu());
 ipcMain.on('aqi:menu-action', (e, act) => handleMenuAction(act));
 ipcMain.on('aqi:save-position', () => saveMainPosition());
 
+// ===== 阶段 9：设置 / 备份恢复 / 位置重置 =====
+ipcMain.handle('aqi:get-settings-state', () => {
+  const root = getAppRoot();
+  const settings = getSettingsSummary(root);
+  let loginItem = settings.startOnBoot;
+  try { loginItem = !!app.getLoginItemSettings().openAtLogin; } catch (_) {}
+  return {
+    settings,
+    appInfo: getAppInfo(root),
+    backups: listBackups(root),
+    version: app.getVersion(),
+    loginItem
+  };
+});
+
+ipcMain.handle('aqi:save-settings', (e, patch) => {
+  const p = (patch && typeof patch === 'object') ? patch : {};
+  const root = getAppRoot();
+  updateSettings(root, p);
+  const has = (k) => Object.prototype.hasOwnProperty.call(p, k);
+  let loginItem = null;
+  if (has('alwaysOnTop')) applyAlwaysOnTop(p.alwaysOnTop);
+  if (has('startOnBoot')) loginItem = applyLoginItem(p.startOnBoot).openAtLogin;
+  // 提醒相关改动 → 档位归零，按新间隔重新计时
+  if (has('remindersEnabled') || has('eyeReminderMin') || has('sitReminderMin')) resetReminderState('settings');
+  refreshTrayMenu();
+  logLine('[settings] saved: ' + Object.keys(p).join(','));
+  return { ok: true, settings: getSettingsSummary(root), loginItem };
+});
+
+ipcMain.handle('aqi:set-pet-name', (e, name) => {
+  const r = setPetName(getAppRoot(), name);
+  logLine(`[settings] setPetName "${name}" ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+  if (r.ok) { refreshTrayMenu(); pushPetState(); }
+  return r;
+});
+
+ipcMain.handle('aqi:backup-now', () => {
+  const r = backupData(getAppRoot());
+  logLine('[settings] backup ' + (r.ok ? r.name : 'FAIL ' + r.reason));
+  return r;
+});
+
+ipcMain.handle('aqi:restore-backup', (e, name) => {
+  const r = restoreBackup(getAppRoot(), name);
+  logLine(`[settings] restore ${name} ok=${r.ok}${r.reason ? ' reason=' + r.reason : ''}`);
+  if (r.ok) {
+    recomputeAll(getAppRoot());   // 恢复后全量重算：统计与宠物立即与记录对齐
+    resetReminderState('restore');
+    refreshTrayMenu();
+    syncTodayRecord();
+    pushPetState();
+  }
+  return r;
+});
+
+ipcMain.handle('aqi:reset-position', () => resetPositionToCenter());
+
+ipcMain.on('aqi:open-data-dir', () => {
+  const dir = path.join(getAppRoot(), 'data');
+  logLine('[settings] open data dir ' + dir);
+  shell.openPath(dir).then((err) => { if (err) logLine('[settings] open dir failed: ' + err); });
+});
+
+ipcMain.on('aqi:close-settings', () => closeSettingsWindow());
+
 // ===== 阶段 6：提醒气泡 =====
 ipcMain.on('aqi:hide-bubble', () => hideBubble());
 // 点击阿七时先调用：若气泡正显示则关掉它，并返回 true（这一击被气泡用掉）
@@ -935,6 +1098,8 @@ if (!gotLock) {
     syncTodayRecord();              // 阶段 3：同步今日工作记录 TXT
     syncIncompleteRecords();        // 阶段 3：补齐跨天未下工那几天的记录
     createWindow();
+    // 阶段 9：应用保存的置顶设置（窗口创建时默认置顶，用户可关闭）
+    if (getSettingsSummary(getAppRoot()).alwaysOnTop === false) applyAlwaysOnTop(false);
     createTray();
     startReminderTimer();   // 阶段 6：健康提醒定时检查（每 60 秒）
     startPetStateTimer();   // 阶段 8：推送宠物状态（驱动桌宠表情/动作）

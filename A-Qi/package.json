@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "make-icon": "node scripts/make-icon.js",
-    "test": "node scripts/test-renderer-load.js && node scripts/test-pet-svg.js && node scripts/test-menu-window.js && node scripts/test-bubble-window.js && node scripts/test-growth-window.js && node scripts/test-repair-window.js && node scripts/test-todo-window.js && node scripts/test-tray.js && node scripts/test-work-record.js && node scripts/test-todo.js && node scripts/test-repair.js && node scripts/test-reminder.js && node scripts/test-growth.js && node scripts/test-stats.js && node scripts/test-worktime.js && node scripts/test-integration.js"
+    "test": "node scripts/test-renderer-load.js && node scripts/test-pet-svg.js && node scripts/test-menu-window.js && node scripts/test-settings-window.js && node scripts/test-bubble-window.js && node scripts/test-growth-window.js && node scripts/test-repair-window.js && node scripts/test-todo-window.js && node scripts/test-tray.js && node scripts/test-work-record.js && node scripts/test-todo.js && node scripts/test-repair.js && node scripts/test-reminder.js && node scripts/test-growth.js && node scripts/test-stats.js && node scripts/test-worktime.js && node scripts/test-integration.js && node scripts/test-backup.js && node scripts/test-migration.js && node scripts/test-boundary.js"
   },
   "author": "V-ming & 阿七",
   "license": "MIT",

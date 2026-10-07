@@ -46,6 +46,15 @@ contextBridge.exposeInMainWorld('aqi', {
   savePosition: () => ipcRenderer.send('aqi:save-position'),
   // 隐藏/显示时的淡出淡入（由渲染层做 CSS 过渡，避开窗口透明度 API 的平台差异）
   onWindowFade: (cb) => ipcRenderer.on('aqi:window-fade', (e, dir) => cb(dir)),
+  // 阶段 9：设置 / 备份恢复 / 位置
+  getSettingsState: () => ipcRenderer.invoke('aqi:get-settings-state'),
+  saveSettings: (patch) => ipcRenderer.invoke('aqi:save-settings', patch),
+  setPetName: (name) => ipcRenderer.invoke('aqi:set-pet-name', name),
+  backupNow: () => ipcRenderer.invoke('aqi:backup-now'),
+  restoreBackup: (name) => ipcRenderer.invoke('aqi:restore-backup', name),
+  resetPosition: () => ipcRenderer.invoke('aqi:reset-position'),
+  openDataDir: () => ipcRenderer.send('aqi:open-data-dir'),
+  closeSettings: () => ipcRenderer.send('aqi:close-settings'),
   // 诊断：渲染层日志上报 → 主进程写入 diag.log（PM 反馈：不再提供页内 DevTools 入口）
   log: (msg) => ipcRenderer.send('aqi:log', msg),
   platform: process.platform

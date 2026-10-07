@@ -488,6 +488,194 @@ function getReminderSettings(root) {
   return readJson(path.join(paths(root).dataDir, 'settings.json'), {});
 }
 
+// ===== 阶段 9：设置 / 数据备份与恢复 / 应用信息 =====
+// 原则（规格 §26/§40）：**程序可以更新，数据不能丢失**；data/ 与 WorkRecords/ 独立于代码，可整体迁移。
+// 备份 = 把这两块**只读复制**到 backup/<时间戳>/；恢复 = 先把当前数据整体挪到临时目录（可回滚），
+// 再把备份复制回来，成功后才删临时目录。恢复前**必定**先自动做一次安全备份。
+
+function normInterval(v, dflt) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 1) return dflt;
+  return Math.min(Math.round(n), 600);   // 上限 10 小时，防手输离谱值
+}
+
+// 设置摘要：读原始 settings.json 并补齐默认值，供设置页展示（**不改写文件**）
+function getSettingsSummary(root) {
+  const s = readJson(path.join(paths(root).dataDir, 'settings.json'), {});
+  const p = readJson(paths(root).pet, {});
+  const work = (s.work && Array.isArray(s.work.intervals) && s.work.intervals.length)
+    ? s.work
+    : { intervals: [['08:00', '12:00'], ['14:00', '18:00']], lunch: ['12:00', '14:00'] };
+  const pos = s.position;
+  // 名字的**唯一权威是 pet.json.name**（settings.petName 只是镜像，防止两处不一致）
+  const name = (typeof p.name === 'string' && p.name.trim()) ? p.name.trim()
+    : ((typeof s.petName === 'string' && s.petName.trim()) ? s.petName.trim() : '阿七');
+  return {
+    petName: name,
+    alwaysOnTop: s.alwaysOnTop !== false,
+    startOnBoot: !!s.startOnBoot,
+    position: (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y))
+      ? { x: Math.round(pos.x), y: Math.round(pos.y) } : null,
+    remindersEnabled: s.remindersEnabled !== false,
+    eyeReminderMin: normInterval(s.eyeReminderMin, 60),
+    sitReminderMin: normInterval(s.sitReminderMin, 90),
+    work
+  };
+}
+
+// 改宠物名（同时更新 pet.json.name 与 settings.petName，避免两处不一致）
+function setPetName(root, name) {
+  const raw = String(name == null ? '' : name).replace(/[\r\n\t]/g, ' ').trim();
+  if (!raw) return { ok: false, reason: 'empty' };
+  if (raw.length > 12) return { ok: false, reason: 'too_long' };
+  const { pet } = paths(root);
+  const p = readJson(pet, {});
+  p.name = raw;
+  writeJson(pet, p);
+  updateSettings(root, { petName: raw });
+  return { ok: true, name: raw };
+}
+
+function backupStamp(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+// 备份名：YYYYMMDD-HHMMSS；同一秒内重复备份（如"备份后立刻恢复"触发安全备份）会加序号后缀
+const BACKUP_NAME_RE = /^\d{8}-\d{6}(-\d+)?$/;
+
+function copyDirRecursive(src, dst) {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, ent.name);
+    const d = path.join(dst, ent.name);
+    if (ent.isDirectory()) copyDirRecursive(s, d);
+    else if (ent.isFile()) fs.copyFileSync(s, d);
+  }
+}
+
+function countFiles(dir, ext) {
+  let n = 0;
+  try {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) n += countFiles(p, ext);
+      else if (ent.isFile() && (!ext || p.endsWith(ext))) n += 1;
+    }
+  } catch (_) { /* 目录不存在按 0 计 */ }
+  return n;
+}
+
+function dirSize(dir) {
+  let n = 0;
+  try {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) n += dirSize(p);
+      else if (ent.isFile()) n += fs.statSync(p).size;
+    }
+  } catch (_) {}
+  return n;
+}
+
+// 备份：把 data/ 与 WorkRecords/ **只读复制**到 backup/<时间戳>/
+function backupData(root) {
+  const { dataDir, workDir, backupDir } = ensureDataLayer(root);
+  const base = backupStamp(new Date());
+  let name = base;
+  let n = 1;
+  while (fs.existsSync(path.join(backupDir, name))) { n += 1; name = base + '-' + n; }  // 同秒重名 → 加序号
+  const dst = path.join(backupDir, name);
+  try {
+    copyDirRecursive(dataDir, path.join(dst, 'data'));
+    copyDirRecursive(workDir, path.join(dst, 'WorkRecords'));
+    writeJson(path.join(dst, 'backup-info.json'), {
+      name,
+      createdAt: new Date().toISOString(),
+      dataFiles: countFiles(path.join(dst, 'data')),
+      recordFiles: countFiles(path.join(dst, 'WorkRecords'), '.txt'),
+      totalBytes: dirSize(dst)
+    });
+    return { ok: true, name, path: dst };
+  } catch (e) {
+    try { fs.rmSync(dst, { recursive: true, force: true }); } catch (_) {}
+    return { ok: false, reason: 'io_error', message: e && e.message };
+  }
+}
+
+function listBackups(root) {
+  const { backupDir } = ensureDataLayer(root);
+  let names = [];
+  try {
+    names = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && BACKUP_NAME_RE.test(d.name))
+      .map((d) => d.name);
+  } catch (_) {}
+  return names.sort().reverse().map((name) => {
+    const p = path.join(backupDir, name);
+    const info = readJson(path.join(p, 'backup-info.json'), null);
+    return {
+      name,
+      createdAt: (info && info.createdAt) || null,
+      sizeBytes: dirSize(p),
+      dataFiles: info ? info.dataFiles : undefined,
+      recordFiles: info ? info.recordFiles : undefined
+    };
+  });
+}
+
+// 恢复：先把当前数据整体挪到临时目录（可回滚），复制备份回去，成功后才删临时目录；
+// 并且**恢复前必定先自动做一次安全备份**（backup/<更早时间戳>/），避免"手滑把今天的数据弄丢"。
+function restoreBackup(root, name) {
+  if (!BACKUP_NAME_RE.test(String(name || ''))) return { ok: false, reason: 'bad_name' };
+  const { dataDir, workDir, backupDir } = ensureDataLayer(root);
+  const src = path.join(backupDir, name);
+  if (!fs.existsSync(src)) return { ok: false, reason: 'not_found' };
+
+  const safe = backupData(root);   // 安全网：先备份"当前"状态
+
+  const tmp = path.join(backupDir, '.restore-tmp');
+  try {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.mkdirSync(tmp, { recursive: true });
+    if (fs.existsSync(dataDir)) fs.renameSync(dataDir, path.join(tmp, 'data'));
+    if (fs.existsSync(workDir)) fs.renameSync(workDir, path.join(tmp, 'WorkRecords'));
+
+    if (fs.existsSync(path.join(src, 'data'))) copyDirRecursive(path.join(src, 'data'), dataDir);
+    if (fs.existsSync(path.join(src, 'WorkRecords'))) copyDirRecursive(path.join(src, 'WorkRecords'), workDir);
+    ensureDataLayer(root);   // 补齐备份里可能缺失的默认文件
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+    return { ok: true, restoredFrom: name, safetyBackup: safe.ok ? safe.name : null };
+  } catch (e) {
+    // 回滚：把临时目录里的原数据挪回来
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+      fs.rmSync(workDir, { recursive: true, force: true });
+      if (fs.existsSync(path.join(tmp, 'data'))) fs.renameSync(path.join(tmp, 'data'), dataDir);
+      if (fs.existsSync(path.join(tmp, 'WorkRecords'))) fs.renameSync(path.join(tmp, 'WorkRecords'), workDir);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    } catch (_) {}
+    return { ok: false, reason: 'io_error', message: e && e.message, safetyBackup: safe.ok ? safe.name : null };
+  }
+}
+
+// 应用信息：数据目录 / 记录数与体积 / 最近一次备份（供设置页"数据"分区展示）
+function getAppInfo(root) {
+  const { dataDir, workDir, backupDir } = ensureDataLayer(root);
+  const att = readJson(path.join(dataDir, 'attendance.json'), {});
+  const backups = listBackups(root);
+  return {
+    dataDir,
+    recordsDir: workDir,
+    backupDir,
+    attendanceDays: Object.keys(att).length,
+    recordFiles: countFiles(workDir, '.txt'),
+    dataBytes: dirSize(dataDir) + dirSize(workDir),
+    backupCount: backups.length,
+    lastBackup: backups.length ? backups[0] : null
+  };
+}
+
 // ===== 阶段 7：成长 / 互动 =====
 // 宠物状态 + 等级 + 好感度 + 解锁 + 互动次数，供「互动 / 宠物状态」窗口使用。
 function getGrowth(root) {
@@ -575,5 +763,7 @@ module.exports = {
   updateSettings, getReminderSettings,
   // 阶段 7
   getGrowth, interact,
+  // 阶段 9
+  getSettingsSummary, setPetName, backupData, listBackups, restoreBackup, getAppInfo,
   todayStr, yesterdayStr, nowHM
 };

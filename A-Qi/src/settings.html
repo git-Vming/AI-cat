@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>阿七设置</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <!-- 设置页（阶段 9）：普通窗口（带系统标题栏，能关）。
+       对应《开发流程》阶段 9：开机启动 / 提醒开关 / 提醒时间 / 宠物名称 / 桌面位置 / 置顶开关 / 数据备份与恢复。 -->
+  <h1>⚙ 阿七设置</h1>
+
+  <section>
+    <h2>宠物</h2>
+    <div class="row">
+      <label for="pet-name">名字</label>
+      <input id="pet-name" type="text" maxlength="12" placeholder="阿七" />
+      <button id="btn-name" class="btn">保存</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>窗口</h2>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="always-on-top" /> 始终置顶</label>
+    </div>
+    <div class="row">
+      <span class="k">桌面位置</span>
+      <span class="v" id="pos-text">—</span>
+      <button id="btn-reset-pos" class="btn">回到屏幕中央</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>健康提醒</h2>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="reminders" /> 开启健康提醒</label>
+    </div>
+    <div class="row">
+      <label for="eye-min">护眼间隔</label>
+      <input id="eye-min" type="number" min="1" max="600" /> <span class="unit">分钟</span>
+    </div>
+    <div class="row">
+      <label for="sit-min">久坐间隔</label>
+      <input id="sit-min" type="number" min="1" max="600" /> <span class="unit">分钟</span>
+    </div>
+    <p class="hint">只在「正在工作 + 不在午休」时提醒，弹在阿七旁边；不扣 EXP、不影响考勤。</p>
+  </section>
+
+  <section>
+    <h2>启动</h2>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="start-on-boot" /> 开机自动启动阿七</label>
+    </div>
+    <p class="hint" id="boot-hint">开启后会在系统启动项里登记阿七（可随时在此关闭）。</p>
+  </section>
+
+  <section>
+    <h2>数据</h2>
+    <div class="row">
+      <span class="k">数据目录</span>
+      <span class="v path" id="data-dir" title="">—</span>
+      <button id="btn-open-dir" class="btn">打开</button>
+    </div>
+    <div class="row"><span class="k">概览</span><span class="v" id="data-summary">—</span></div>
+    <div class="row"><span class="k">最近备份</span><span class="v" id="last-backup">—</span></div>
+    <div class="row"><button id="btn-backup" class="btn primary">💾 立即备份</button></div>
+    <div class="backups" id="backups"></div>
+    <p class="hint warn">恢复会用备份覆盖当前数据；程序在恢复前会自动把「当前数据」再备份一次，以防手滑。</p>
+  </section>
+
+  <section>
+    <h2>关于</h2>
+    <div class="row"><span class="k">版本</span><span class="v" id="ver">—</span></div>
+    <p class="hint">阿七完全本地运行：不联网、不上传、不读取工作记录以外的任何文件。</p>
+  </section>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="settings-window.js"></script>
+</body>
+</html>
