@@ -8,7 +8,8 @@
 <body>
   <!-- 阿七本体：【直接使用原画贴图】assets/pet/pose_*.png（《阿七形象资产》·动作设定）。
        程序只负责"显示哪一张 + 拖动 + 点击 + 显隐"，绝不重绘形象。
-       默认显示 pose_sit.png；主进程推送 aqi:pet-look 后会切到对应动作。
+       默认显示 pose_lie.png（"趴着" = 待机，PM 2026-10-07 定稿）；
+       主进程推送 aqi:pet-look 后会切到对应动作（上工→坐、下工/开心→走路…）。
 
        2026-10-07 PM 指示：
          · 不可以自己修改形象原画 → 全部图片均为原画裁切，未经重绘
@@ -16,7 +17,7 @@
          · 增加"宠物大小"设置：窗口缩小一半 → .pet 用百分比铺满 → 形象等比缩小一半 -->
 
   <div id="pet" class="pet" title="阿七">
-    <img class="pet-img" id="pet-img" src="../assets/pet/pose_sit.png" alt="阿七" draggable="false" />
+    <img class="pet-img" id="pet-img" src="../assets/pet/pose_lie.png" alt="阿七" draggable="false" />
   </div>
 
   <script src="pet-look.js"></script>

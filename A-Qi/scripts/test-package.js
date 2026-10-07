@@ -49,8 +49,9 @@ for (const f of ['index.html', 'app.js', 'styles.css', 'pet-look.js', 'menu.html
 check('app/src/pet-svg.js 已删除（形象改为原画贴图，不再程序化绘制）',
   !exists(path.join(APP, 'src', 'pet-svg.js')));
 check('app/assets/pet 原画进包（形象资源必须随程序走）',
-  exists(path.join(APP, 'assets', 'pet', 'pose_sit.png')) &&
-  exists(path.join(APP, 'assets', 'pet', 'pose_work.png')));
+  exists(path.join(APP, 'assets', 'pet', 'pose_sit.png')));
+check('app 内不再包含已弃用的 pose_work.png（看电脑贴图）',
+  !exists(path.join(APP, 'assets', 'pet', 'pose_work.png')));
 check('app/assets/icons/tray-icon.png 存在', exists(path.join(APP, 'assets', 'icons', 'tray-icon.png')));
 
 console.log('— 不该进包的东西 —');

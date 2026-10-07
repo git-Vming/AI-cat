@@ -53,7 +53,8 @@ function setState(state) {
 
 // ===== 原画显示：主进程推来"该看哪张动作" =====
 // pose 取值来自 src/pet-look.js（sit/walk/lie/sleep/stretch/drink/eat/levelup）。
-const POSE_LIST = (window.PetLook && window.PetLook.POSES) || ['sit'];
+// 兜底一律用 'lie'："趴着"就是待机态（PM 2026-10-07 定），异常时显示它最不违和。
+const POSE_LIST = (window.PetLook && window.PetLook.POSES) || ['lie'];
 const ASSET_DIR = '../assets/pet/';
 let curPose = null;
 function poseUrl(pose) {
@@ -61,7 +62,7 @@ function poseUrl(pose) {
 }
 function applyLook(look) {
   if (!petImg || !look) return;
-  const pose = POSE_LIST.indexOf(look.pose) >= 0 ? look.pose : 'sit';
+  const pose = POSE_LIST.indexOf(look.pose) >= 0 ? look.pose : 'lie';
   if (pose === curPose) return;                 // 只在变化时换图，避免无谓重载
   curPose = pose;
   petImg.src = poseUrl(pose);

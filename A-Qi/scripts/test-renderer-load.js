@@ -190,10 +190,11 @@ check('宠物状态写入 data-state 供调试（初始 IDLE）',
   check('index.html 引用 app.js', /app\.js/.test(html));
   check('index.html 不再加载 pet-svg.js（不再程序化绘制）', !/pet-svg\.js/.test(html));
   check('index.html 加载 pet-look.js（显示逻辑模块）', /pet-look\.js/.test(html));
-  check('index.html 用 <img> 直接引用动作原画 pose_sit.png',
-    /<img[^>]+src="\.\.\/assets\/pet\/pose_sit\.png"/.test(html), '未找到原画 img');
-  check('原画文件确实存在（assets/pet/pose_sit.png）',
-    fs.existsSync(path.join(ROOT, 'assets', 'pet', 'pose_sit.png')));
+  check('index.html 用 <img> 直接引用动作原画 pose_lie.png（"趴着" = 待机）',
+    /<img[^>]+src="\.\.\/assets\/pet\/pose_lie\.png"/.test(html), '未找到原画 img');
+  check('原画文件确实存在（assets/pet/pose_lie.png）',
+    fs.existsSync(path.join(ROOT, 'assets', 'pet', 'pose_lie.png')));
+  check('index.html 不再引用已弃用的 pose_work.png', !/pose_work/.test(html));
   check('index.html 不再包含旧状态卡（card 已由独立菜单窗取代）', !/id="card"/.test(html));
   const menuHtml = fs.readFileSync(path.join(ROOT, 'src', 'menu.html'), 'utf8');
   check('menu.html 引用的是窗口脚本 menu-window.js（不与纯逻辑同名）',
@@ -220,7 +221,11 @@ check('宠物状态写入 data-state 供调试（初始 IDLE）',
     els.pet.dataset.pose === 'eat' && els.pet.dataset.mood === 'happy',
     els.pet.dataset.pose + '/' + els.pet.dataset.mood);
   petLookCb({ pose: '完全不存在的姿势' });
-  check('非法动作名回退 pose_sit.png', /pose_sit\.png/.test(String(petImgEl.src)), String(petImgEl.src));
+  check('非法动作名回退 pose_lie.png（待机兜底）',
+    /pose_lie\.png/.test(String(petImgEl.src)), String(petImgEl.src));
+  petLookCb({ pose: 'work' });
+  check('★已弃用的 work 也会回退 pose_lie.png（防止旧状态串回来）',
+    /pose_lie\.png/.test(String(petImgEl.src)), String(petImgEl.src));
 
   // ---------- ⑬ 宠物大小设置（大 / 小 = 一半） ----------
   check('app.js 已订阅宠物大小（api.onPetSize）', !!petSizeCb);

@@ -22,9 +22,11 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // 2026-10-07 PM 指示：原先"上工中"只能借用 sit（动作设定里没有全身的"看电脑"姿势）。
-  // 现改为从《场景互动 2x2》左上格裁切 + 抠图得到的 work（见 assets/pet/pose_work.png）。
-  const POSES = ['sit', 'walk', 'lie', 'sleep', 'stretch', 'drink', 'eat', 'levelup', 'work'];
+  // 动作设定 8 张。PM 2026-10-07 定稿的映射：
+  //   **趴着 lie = 待机** · **坐着 sit = 上工中** · **走路 walk = 下工 / 开心**
+  //   其余：睡觉 sleep（午休 / 夜间）· 伸懒腰 stretch（提醒中）· 喝水 drink · 吃东西 eat · 升级 levelup
+  // 注：曾短暂加入过一张「看电脑(work)」，因观感不好已被 PM 弃用（2026-10-07），勿再恢复。
+  const POSES = ['sit', 'walk', 'lie', 'sleep', 'stretch', 'drink', 'eat', 'levelup'];
   const MOODS = ['normal', 'happy', 'surprise', 'shy', 'sleepy', 'angry', 'sad', 'tilt'];
   const SCENES = ['work', 'stretch', 'drink', 'eat'];
 
@@ -47,10 +49,10 @@
     if (st === 'REMINDING') return 'stretch';  // 护眼/久坐提醒中 → 该起来活动了
     if (st === 'SLEEP') return 'sleep';        // 夜间 22:00–06:00
     if (c.lunch) return 'sleep';               // 工作日午休 12:00–14:00（PM 指定）
-    if (st === 'HAPPY') return 'walk';         // 摸头/玩耍后 → 开心地溜达
-    if (st === 'WORKING') return 'work';       // 上工中 → 看电脑（PM 指定用场景图左上格的全身像）
-    if (c.completedToday) return 'lie';        // 今日已下工 → 趴着歇会儿
-    return 'sit';                              // 其余（待机）
+    if (st === 'HAPPY') return 'walk';         // 开心（互动后）→ 走路
+    if (st === 'WORKING') return 'sit';        // ★上工中 → 坐着（PM 2026-10-07 定）
+    if (c.completedToday) return 'walk';       // ★今日已下工 → 走路（PM 2026-10-07 定）
+    return 'lie';                              // ★待机 → 趴着（PM 2026-10-07 定）
   }
 
   /**
