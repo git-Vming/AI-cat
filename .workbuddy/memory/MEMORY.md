@@ -167,6 +167,16 @@
   可复用件在 `_preview/_ui_check/`。
 - **清理用户数据前一律先 `backupData()`**；"删除"改用 PowerShell `Move-Item` 归档到
   `backup/<说明>_<日期>/`（非标准备份名，不会被 `listBackups` 当成备份）。
+- **【GitHub 推送的两个坑】（2026-10-07 踩到）**
+  ① git global 配着 `http.proxy=http://127.0.0.1:7890`（Clash 类），**代理软件没开时所有 git 网络操作都会失败**
+  （报 `Failed to connect to github.com:443 over proxy 127.0.0.1`）。**本机直连可通** →
+  在仓库内 `git config --local http.proxy ""`（空值覆盖 global）即可恢复正常。
+  **排查 git 连不上时，第一个要看的就是代理配置。**
+  ② **本机没有任何 GitHub 凭据**（未装 `gh`、凭据管理器无 github 条目、无 `.git-credentials`）→
+  **无法无人值守 push**；仓库 remote = `https://github.com/git-Vming/AI-cat.git`（owner `git-Vming`）。
+  需要 PM 在本机执行一次（弹窗登录后自动记住）或提供 PAT。WorkBuddy 的 GitHub 通道虽已授权为 `git-Vming`，
+  但其 `push_files` 只能"一次提交写多文件"（**会丢提交历史、标签无法创建，且二进制图片同步不可靠**），
+  **不适合替代 git push**。
 
 ## 工程约定（踩过的坑，务必遵守）
 - **纯逻辑模块要被渲染层 `<script>` 直接加载，用 UMD 头**（主进程可 `require` 单测、html 加载同一份）。
