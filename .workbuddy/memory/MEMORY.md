@@ -75,8 +75,10 @@
   ② 物理快照 `_snapshots/<名>_<日期>/`（含源码 + 文档 + `校验清单.txt`(sha256) + `快照说明.md` 回退步骤）。
 - **快照只冻结「程序」，绝不含用户数据**：排除 `node_modules/`、`data/*.json`、`WorkRecords/*`、
   `backup/*`、`diag.log`、`dist/`（构建产物）。
-- **当前 = 快照 `_snapshots/V1.0-测试版_阶段10_20261007/`**（阶段 0–10，校验 81/81 OK）；标签 `v1.0-beta-6`。
-  历史快照（阶段 0–9 及更早）已归档到 `_snapshots/_历史版本/`；同一天多阶段用 `_阶段N_` 后缀区分。
+- **当前 = 快照 `_snapshots/V1.0-测试版_形象终版_20261007/`**（**110/110 OK** / 111 文件 / 7.4MB）；
+  标签 **`v1.0-beta-7`** = 提交 `5188ac3` —— **阶段 0–10 全部通过 + 形象/动作映射终版 = V1.0 测试版交付**。
+  历史快照（阶段 0–10 及更早）已归档到 `_snapshots/_历史版本/`。
+  交付物：`A-Qi/dist/A-Qi-V1.0.0-win32-x64/A-Qi.exe`（264MB，**不进 git、不进快照**，用 `npm run package` 重建）。
 - 根 `.gitignore` 排除 `_snapshots/`、`node_modules/`、`diag.log`、`_preview/`、`dist/`。
 - **【坑】sha256 校验清单不要用 `xargs`**：本机环境变量过多 → `xargs: environment is too large for exec`，
   会**静默生成空清单**（`OK=0 FAILED=0`，极难察觉）。改用
@@ -137,7 +139,7 @@
   `pose_work.png` 与 source 存档均已删（**PM 手抠原图仍在 `_preview/阿七形象资产/看电脑.png`**）。
   **不要恢复 work** —— 三套测试都有防复活断言。
 - 【已定】纯黑原画贴深色壁纸会"糊"进背景 → PM 答复：**保持现状，不加光晕**。
-- 【待 PM 定】`aqi.png`(264KB) 与 `placeholder-cat.svg`(1.2KB) 已是**无引用的孤儿文件**，是否删除。
+- 【已删除】`aqi.png`(264KB) 与 `placeholder-cat.svg`(1.2KB) —— PM 2026-10-07 确认无引用后删除。
 
 ## ★两条通用教训（比具体实现更值钱）
 1. **素材方案被否时，先问"能不能用现有素材 + 改语义解决"**。PM 最终用"8 张图重排语义"代替"新增贴图"——
