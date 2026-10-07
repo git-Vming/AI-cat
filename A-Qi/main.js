@@ -74,6 +74,12 @@ if (readMarker()) {
   logLine('[main] 检测到软件渲染标记 → disableHardwareAcceleration()');
 }
 
+// 启动第一行日志：**确认 main.js 真的被加载**。
+// 排查"双击没反应 / 打包后启动即退出"这类问题时，这一行是分水岭 ——
+// 有它说明主进程跑起来了（问题在窗口/渲染层），没有它说明 Electron 根本没找到 app。
+logLine(`[main] boot v${app.getVersion()} packaged=${app.isPackaged} `
+  + `execPath=${process.execPath} resources=${process.resourcesPath}`);
+
 function createWindow() {
   const root = getAppRoot();
   ensureDataLayer(root); // 阶段 1：初始化 data/ WorkRecords/ backup/ 与默认 JSON
@@ -675,8 +681,8 @@ function closeSettingsWindow() {
 }
 
 // 开机启动：开发期（electron.exe .）与打包后（A-Qi.exe）登记方式不同，分别处理。
-// 说明：规格 §37 建议默认开启，但**本实现默认关闭**，由用户在设置页显式开启 ——
-//   往用户系统写"开机自动启动"是敏感操作，不擅自替用户决定（报告第五节已说明）。
+// 默认值：**开启**（规格 §37「默认建议开启」；V-ming 2026-10-07 确认）。
+// 用户可在设置页随时关闭；程序不会把用户的关闭决定改回来（见 syncLoginItem 的判定）。
 function applyLoginItem(enabled) {
   const on = !!enabled;
   try {
@@ -704,6 +710,22 @@ function applyAlwaysOnTop(v) {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(v !== false);
     logLine('[settings] 置顶 -> ' + (v !== false));
   } catch (e) { logLine('[settings] applyAlwaysOnTop failed: ' + (e && e.message)); }
+}
+
+// 启动时把「设置里的意愿」与「系统的真实登记状态」对齐：
+//   设置说开、系统没登记 → 登记（首装用户默认开启，规格 §37）
+//   设置说关、系统还登记着 → 撤销
+// 注：以**设置页**为唯一开关。若在系统"启动项"里手动禁用，下次启动会被设置同步回来；
+//    想关请在阿七的设置页里关（这样才会写回 settings.json）。
+function syncLoginItem() {
+  try {
+    const want = !!getSettingsSummary(getAppRoot()).startOnBoot;
+    const real = !!app.getLoginItemSettings().openAtLogin;
+    if (want !== real) {
+      logLine(`[settings] 开机启动状态不同步（设置=${want} 系统=${real}）→ 按设置同步`);
+      applyLoginItem(want);
+    }
+  } catch (_) {}
 }
 
 function resetPositionToCenter() {
@@ -1082,6 +1104,7 @@ app.on('child-process-gone', (e, details) => {
 // ===== 防止多开 =====
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  logLine('[main] 未取得单实例锁 → 退出（系统里已有一个阿七在运行）');
   app.quit();
 } else {
   app.on('second-instance', () => showWindow());
@@ -1100,6 +1123,8 @@ if (!gotLock) {
     createWindow();
     // 阶段 9：应用保存的置顶设置（窗口创建时默认置顶，用户可关闭）
     if (getSettingsSummary(getAppRoot()).alwaysOnTop === false) applyAlwaysOnTop(false);
+    // 阶段 9：开机启动与设置对齐（默认开启）
+    syncLoginItem();
     createTray();
     startReminderTimer();   // 阶段 6：健康提醒定时检查（每 60 秒）
     startPetStateTimer();   // 阶段 8：推送宠物状态（驱动桌宠表情/动作）

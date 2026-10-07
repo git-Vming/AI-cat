@@ -77,9 +77,11 @@
   1. Git 提交 + 打标签。仓库 remote = github.com/git-Vming/AI-cat，**未经 PM 同意不 push**。
   2. 物理快照目录 `D:\AI-cat\AI-cat\_snapshots\<名>_<日期>\`：含 `A-Qi/` 源码 + `文档/` + `校验清单.txt`(sha256) + `快照说明.md`(回退步骤)。
 - **快照只冻结「程序」，绝不包含用户数据**：排除 `node_modules/`、`data/*.json`、`WorkRecords/*`、`backup/*`、`diag.log`。回退后阿七仍带全部工作记录与等级。
-- **当前 V1.0 测试版（2026-10-07 滚动）= 快照 `_snapshots/V1.0-测试版_阶段8_20261007/`**（阶段 0–8，69 文件 / 2.2MB / 校验 68/68 OK）。
-  Git 标签：`v1.0-beta-4`（阶段 0–8）。历史快照 `V1.0-测试版_阶段7_20261007`(阶段0-7) / `V1.0-测试版_20261005`(阶段0-6) /
-  `V1.0-beta-2`(阶段0-5) / `V1.0-beta`(阶段0-4) 已归档到 `_snapshots/_历史版本/`。
+- **当前 V1.0 测试版（2026-10-07 滚动）= 快照 `_snapshots/V1.0-测试版_阶段9_20261007/`**（阶段 0–9，77 文件 / 2.3MB / 校验 76/76 OK）。
+  Git 标签：`v1.0-beta-5`（阶段 0–9）。历史快照 `V1.0-测试版_阶段8_20261007`(0-8) / `_阶段7_`(0-7) / `_20261005`(0-6) /
+  `V1.0-beta-2`(0-5) / `V1.0-beta`(0-4) 已归档到 `_snapshots/_历史版本/`。
+- **2026-10-07 按 PM 指示清理了开发期测试数据**：`data/` 回到 Lv.1 初始态、`WorkRecords/` 清空；
+  清理前已完整备份到 `backup/20261007-144050/`（设置页可一键恢复）。**Phase 10 打包产物 `A-Qi/dist/` 不属于快照**（构建产物）。
 - **快照命名**：同一天多个阶段时用 `V1.0-测试版_阶段N_日期`，避免重名分不清。
 - **约定**：`_snapshots/` 下只保留"当前版本"一份非归档快照 + `_历史版本/`；每通过一个阶段就滚动一次。
 - 根 `.gitignore` 排除 `_snapshots/`、`node_modules/`、`diag.log`、`_preview/`。
@@ -98,6 +100,26 @@
 - 升级用**气泡**提示（复用阶段6 气泡，点击才消失）。
 - 窗口：`src/growth.html` / `growth.css` / `growth-window.js`（单窗两区：❤️互动 + 🎒宠物状态，普通窗口），托盘两个入口。
 - 【测试坑】想造某个等级**不能**手动改 `pet.totalExp` —— `recomputeAll` 会从 attendance 重新派生并覆盖；必须用真实工时记录堆出等级。
+
+## 打包与交付（阶段10 确立）
+- **免安装版打包 = 零外部依赖手动组装**（`scripts/package.js`，`npm run package`）：
+  复制 `node_modules/electron/dist` → 组装 `resources/app`（main.js/preload.js/src/assets）→ `electron.exe` 改名 `A-Qi.exe`。
+  **前提：运行时 `dependencies` 必须为空**（本项目的确为空，只有 devDependency: electron），所以 `resources/app` 不需要 `node_modules`。
+  脚本会检查这一点，非空则拒绝打包。
+- 产物 `A-Qi/dist/A-Qi-V1.0.0-win32-x64/`（约 258MB）。**`dist/` 是构建产物，不进快照、不入测试**。
+- 数据目录取 `path.dirname(app.getPath('exe'))`（打包后）或 `__dirname`（开发期）→ 双击就能在旁边生成 `data/ WorkRecords/ backup/ diag.log`。
+- 日常改代码后重打包：`rm -rf dist && npm run package`；验证：`node scripts/test-package.js`（加 `--launch` 才启动窗口）。
+
+## 本机环境坑（踩过，务必记住）
+- **node 的删除 API 被 safe-delete 包装**（送回收站，且本机回收站不可用 → `unlinkSync` / `rmSync` **一律抛错**）。
+  可用的替代：① PowerShell `Move-Item`（归档而非删除）；② `ELECTRON_RUN_AS_NODE=1 ./A-Qi.exe`（Electron 自带 Node，无包装，适合清构建产物）；
+  ③ bash `rm -rf` 只对**构建产物**（如 `dist/`）用，绝不用于用户数据。
+- **PowerShell 的 `Add-Type` 被安全策略禁用**（所以 .NET 回收站 API / 自定义类型都用不了）。
+- **PowerShell 工具 stdout 常为空** → 需要写文件再读。
+- **往文件里注入诊断代码时，用 heredoc 写，不要用 node -e 的嵌套字符串拼接** ——
+  `\n` 转义会被吞，把代码写成跨行字符串 → SyntaxError → 会误判成"程序启动失败"。写完必须 `node --check` 验一遍。
+- **本执行环境无法创建 Electron GUI 窗口**：打包后 exe 的 GUI 启动、CPU/内存实测都由 PM 在真实桌面验证；
+  沙箱内可用 `--version`、`ELECTRON_RUN_AS_NODE` 跑代码、结构断言来做替代验证。
 
 ## 工程约定（踩过的坑，务必遵守）
 - **纯逻辑模块若要被渲染层直接 `<script>` 加载，用 UMD 头**（阶段8 `src/pet-svg.js` 的做法）：

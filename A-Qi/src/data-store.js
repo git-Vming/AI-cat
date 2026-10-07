@@ -44,7 +44,9 @@ function ensureDataLayer(root) {
       weekendOvertimeCount: 0, weekendOvertimeMinutes: 0
     },
     'settings.json': {
-      petName: '阿七', alwaysOnTop: true, startOnBoot: false,
+      // 阶段 9：开机启动**默认开启**（规格 §37「默认建议开启」，V-ming 2026-10-07 确认）。
+      // 用户可在设置页随时关闭；程序不会改写已存在的设置文件（老用户保持原值，除非手动开）。
+      petName: '阿七', alwaysOnTop: true, startOnBoot: true,
       position: null,
       // 阶段 6：健康提醒（默认开启；间隔单位分钟；托盘可开关，设置界面留阶段 9）
       // 注：V-ming 2026-10-05 验收决定取消喝水提醒，故默认值不再包含 waterReminderMin；

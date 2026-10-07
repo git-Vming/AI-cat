@@ -83,24 +83,31 @@ function computeWorked(startTs, endTs, type, settings) {
 }
 
 // 保留 1 位小数，四舍五入（V-ming 2026-10-02 要求：所有 EXP 保留 1 位小数）
+// 统一的数值净化：脏数据（字符串 / null / NaN / 负数）一律当 0。
+// 起因（阶段 10 自测发现的真 BUG）：Math.max(0, NaN) 仍然是 NaN，
+// 于是 pet.json 的 totalExp 若被手工改成非数字，等级会算出 NaN、界面显示 "Lv.NaN"。
+function safeNum(v) {
+  const n = Number(v);
+  return (Number.isFinite(n) && n > 0) ? n : 0;
+}
+
 function round1(x) {
-  return Math.round(x * 10) / 10;
+  return Math.round(safeNum(x) * 10) / 10;
 }
 
 function expFromMinutes(minutes) {
-  return round1(minutes / 60 * 10); // 60min = 10 EXP，保留 1 位小数
+  return round1(safeNum(minutes) / 60 * 10); // 60min = 10 EXP，保留 1 位小数
 }
 
 // 升级所需 EXP（固定值）：每累计 80 EXP 升 1 级（Lv.1→Lv.2→…）
 const EXP_PER_LEVEL = 80;
 
 function levelFromTotalExp(totalExp) {
-  const t = Math.max(0, totalExp);
-  return Math.floor(t / EXP_PER_LEVEL) + 1;
+  return Math.floor(safeNum(totalExp) / EXP_PER_LEVEL) + 1;
 }
 
 function expInLevel(totalExp) {
-  const t = Math.max(0, totalExp);
+  const t = safeNum(totalExp);
   return t - Math.floor(t / EXP_PER_LEVEL) * EXP_PER_LEVEL;
 }
 
