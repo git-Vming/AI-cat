@@ -25,6 +25,8 @@ let repairWindow = null;   // 阶段 4：补录 / 修正考勤窗口（普通窗
 let todoWindow = null;     // 阶段 5：今日待办 + 工作统计窗口（同样用普通窗口）
 let bubbleWindow = null;   // 阶段 6：提醒气泡（独立无边框小窗，贴在阿七旁边）
 let growthWindow = null;   // 阶段 7：互动 + 宠物状态窗口（同样用普通窗口）
+let menuWindow = null;     // 阶段 8：点击阿七弹出的功能菜单（独立无边框小窗）
+let petStateTimer = null;  // 阶段 8：宠物状态推送定时器（驱动表情/动作切换）
 
 // 数据根目录：打包后取 exe 同目录（保证数据与程序分离、整体可迁移）；
 // 开发期取项目根目录。
@@ -77,6 +79,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 180,
     height: 200,
+    show: false,         // 阶段 8：先恢复桌面位置再显示，避免启动瞬间闪一下
     transparent: true,   // 透明背景
     frame: false,        // 无边框
     alwaysOnTop: true,   // 始终置顶
@@ -118,6 +121,13 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // 阶段 8：恢复上次桌面位置后再显示（applySavedPosition 为函数声明，已提升）
+  mainWindow.once('ready-to-show', () => {
+    applySavedPosition();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    logLine('[main] window shown');
+  });
 
   // 注：拖动由渲染层（app.js）用 pointer 事件计算位移、经 aqi:drag 调用 setPosition 实现；
   // 不挂 -webkit-app-region 拖拽区（OS 会把它当非客户区，吞掉 mouseup/click），
@@ -494,8 +504,165 @@ function announceLevelUp(level, newUnlocks) {
   if (um) lines.push(um);
   lastAction = 'levelup';
   lastActionAt = new Date().toISOString();
+  showWindow();
   showBubble(lines.join('\n'));
+  // 阶段 8：桌宠本体播一次「升级」动作
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send('aqi:level-up'); } catch (_) {}
+  }
+  pushPetState();
   logLine('[growth] level up -> Lv.' + level + (um ? ' / ' + um : ''));
+}
+
+// ===== 阶段 8：点击阿七弹出的功能菜单（规格 §34 + 设计板）=====
+// 选型：独立无边框小窗，而不是把桌宠主窗口撑大 ——
+//   主窗口 180×200 已验收，扩窗会让透明区域变大、挡住更多桌面操作（规格 §35 明确不许遮挡办公）。
+//   菜单做成独立窗后，主窗口只负责"阿七本体 + 动画"，零回归。
+// focusable:false —— 菜单不抢焦点，因此点击阿七可反复开关菜单时不会引发失焦抖动。
+const MENU_W = 196;
+const MENU_H = 344;
+const MENU_GAP = 8;
+
+function createMenuWindow() {
+  menuWindow = new BrowserWindow({
+    width: MENU_W,
+    height: MENU_H,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    title: '阿七菜单',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  const wc = menuWindow.webContents;
+  wc.on('did-finish-load', () => logLine('[menu] did-finish-load'));
+  wc.on('did-fail-load', (e, code, desc) => logLine(`[menu] did-fail-load code=${code} desc=${desc}`));
+  wc.on('preload-error', (e, p, err) => logLine(`[menu] preload-error ${err && err.message}`));
+  wc.on('console-message', (...args) => {
+    const maybe = args[1];
+    const msg = (maybe && typeof maybe === 'object') ? maybe.message : args[2];
+    logLine(`[menu-console] ${msg}`);
+  });
+  menuWindow.loadFile(path.join(__dirname, 'src', 'menu.html'));
+  menuWindow.on('closed', () => { menuWindow = null; logLine('[menu] closed'); });
+  logLine('[menu] window created');
+}
+
+// 依主窗口位置摆放菜单：默认贴阿七【右侧】，右侧空间不足则翻到左侧
+function positionMenu() {
+  if (!menuWindow || menuWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const b = mainWindow.getBounds();
+  let wa = { x: 0, y: 0, width: 1920, height: 1080 };
+  try { wa = screen.getDisplayMatching(b).workArea; } catch (_) {}
+
+  let x = Math.round(b.x + b.width + MENU_GAP);
+  let y = Math.round(b.y + b.height / 2 - MENU_H / 2);
+  if (x + MENU_W > wa.x + wa.width - 4) x = Math.round(b.x - MENU_W - MENU_GAP);  // 右侧放不下 → 左侧
+  x = Math.min(Math.max(x, wa.x + 4), wa.x + wa.width - MENU_W - 4);
+  y = Math.min(Math.max(y, wa.y + 4), wa.y + wa.height - MENU_H - 4);
+  menuWindow.setBounds({ x, y, width: MENU_W, height: MENU_H });
+}
+
+function menuVisible() {
+  return !!(menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible());
+}
+
+function showMenu() {
+  if (!menuWindow || menuWindow.isDestroyed()) createMenuWindow();
+  const paint = () => {
+    if (!menuWindow || menuWindow.isDestroyed()) return;
+    positionMenu();
+    menuWindow.show();                 // focusable:false 的窗口不会抢走焦点
+    if (typeof menuWindow.moveTop === 'function') menuWindow.moveTop();
+    logLine('[menu] shown');
+  };
+  if (menuWindow.webContents.isLoading()) menuWindow.once('ready-to-show', () => setTimeout(paint, 60));
+  else paint();
+}
+
+function hideMenu() {
+  if (menuVisible()) {
+    menuWindow.hide();
+    try { menuWindow.webContents.send('aqi:menu-hidden'); } catch (_) {}
+    logLine('[menu] hidden');
+  }
+}
+
+function toggleMenu() {
+  if (menuVisible()) hideMenu();
+  else showMenu();
+}
+
+// 菜单项 → 对应功能（执行后收起菜单）
+function handleMenuAction(act) {
+  logLine('[menu] action ' + act);
+  hideMenu();
+  switch (act) {
+    case 'records': openTodayRecord(); break;
+    case 'todo': openTodoWindow('todo'); break;
+    case 'stats': openTodoWindow('stats'); break;
+    case 'growth': openGrowthWindow('interact'); break;
+    case 'status': openGrowthWindow('status'); break;
+    case 'settings':
+      // 设置界面属阶段 9；此处给明确反馈，不留"点了没反应"
+      showWindow();
+      showBubble('⚙ 设置界面将在后续版本提供～');
+      break;
+    case 'hide': hideWindow(); break;
+    default: break;
+  }
+}
+
+// ===== 阶段 8：宠物状态推送（驱动桌宠的表情与动作切换）=====
+// 状态由 growth.computeState 判定（工作中/提醒中/夜间睡眠/互动后…），
+// 渲染层把状态映射成"表情 + 姿态"，并把「工作时的随机小动作」交给渲染层做，
+// 避免每秒重建 SVG 打断 CSS 动画。
+function pushPetState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  let st = 'IDLE';
+  try { st = currentPetState(); } catch (_) {}
+  try { mainWindow.webContents.send('aqi:pet-state', st); } catch (_) {}
+}
+
+function startPetStateTimer() {
+  if (petStateTimer) clearInterval(petStateTimer);
+  petStateTimer = setInterval(pushPetState, 3000);
+}
+
+// ===== 阶段 8：桌面位置记忆（规格 §35 + 阶段 9 的"桌面位置"项）=====
+// 拖动结束由渲染层通知保存；启动时恢复。显示器分辨率/布局变化时做边界收敛，
+// 防止阿七"跑到屏幕外找不回来"。
+function applySavedPosition() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const s = readJson(path.join(getAppRoot(), 'data', 'settings.json'), {});
+    const p = s && s.position;
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+    let wa = { x: 0, y: 0, width: 1920, height: 1080 };
+    try { wa = screen.getDisplayMatching({ x: p.x, y: p.y, width: 1, height: 1 }).workArea; } catch (_) {}
+    const x = Math.min(Math.max(Math.round(p.x), wa.x - 60), wa.x + wa.width - 60);
+    const y = Math.min(Math.max(Math.round(p.y), wa.y - 40), wa.y + wa.height - 60);
+    mainWindow.setPosition(x, y);
+    logLine(`[main] restore position ${x},${y}`);
+  } catch (e) { logLine('[main] applySavedPosition failed: ' + (e && e.message)); }
+}
+
+function saveMainPosition() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const [x, y] = mainWindow.getPosition();
+    updateSettings(getAppRoot(), { position: { x, y } });
+    logLine(`[main] save position ${x},${y}`);
+  } catch (e) { logLine('[main] saveMainPosition failed: ' + (e && e.message)); }
 }
 
 // ===== 托盘菜单 =====
@@ -568,6 +735,12 @@ function buildTrayTemplate() {
       }
     },
     { type: 'separator' },
+    {
+      // 阶段 9 才做设置页；先给一个明确入口与反馈，避免"点了没反应"
+      label: '⚙ 设置',
+      click: () => { showWindow(); showBubble('⚙ 设置界面将在后续版本提供～'); }
+    },
+    { type: 'separator' },
     { label: '退出', click: () => { logLine('[tray] 退出'); app.quit(); } },
     { type: 'separator' },
     // 版本号：放在「退出」下方，灰色淡显（原生菜单只能靠 enabled:false 变灰）
@@ -597,14 +770,24 @@ function createTray() {
   logLine('[main] tray created');
 }
 
+// 显示/隐藏带淡入淡出（阶段 8「隐藏/显示动画」）：
+// 淡出由渲染层 CSS 完成，主进程等过渡结束再真正 hide —— 不用窗口透明度 API，避开平台差异。
 function showWindow() {
   if (!mainWindow) return;
+  try { mainWindow.webContents.send('aqi:window-fade', 'in'); } catch (_) {}
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true);
   if (typeof mainWindow.moveTop === 'function') mainWindow.moveTop();
   mainWindow.focus();
 }
-function hideWindow() { if (mainWindow) mainWindow.hide(); }
+function hideWindow() {
+  hideMenu();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try { mainWindow.webContents.send('aqi:window-fade', 'out'); } catch (_) {}
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  }, 170);
+}
 function toggleWindow() {
   if (!mainWindow) return;
   if (mainWindow.isVisible()) hideWindow();
@@ -620,6 +803,7 @@ ipcMain.on('aqi:drag', (e, dx, dy) => {
   const [x, y] = mainWindow.getPosition();
   mainWindow.setPosition(Math.round(x + dx), Math.round(y + dy));
   if (bubbleVisible()) positionBubble();   // 阶段 6：气泡跟随阿七一起移动
+  if (menuVisible()) positionMenu();       // 阶段 8：菜单跟随阿七一起移动
 });
 // 诊断：渲染层日志上报（PM 反馈：不再提供页内 DevTools 入口，日志足够）
 ipcMain.on('aqi:log', (e, msg) => logLine(`[renderer] ${msg}`));
@@ -631,6 +815,7 @@ ipcMain.handle('aqi:punch-in', () => {
   if (r.ok) resetReminderState('punch-in');   // 阶段 6
   refreshTrayMenu();
   syncTodayRecord();
+  pushPetState();                             // 阶段 8：桌面阿七立即进入"工作中"
   return r;
 });
 ipcMain.handle('aqi:punch-out', () => {
@@ -641,6 +826,7 @@ ipcMain.handle('aqi:punch-out', () => {
   }
   refreshTrayMenu();
   syncTodayRecord();
+  pushPetState();                             // 阶段 8
   return r;
 });
 
@@ -698,11 +884,22 @@ ipcMain.handle('aqi:interact', (e, key) => {
     lastActionAt = new Date().toISOString();
     r.state = currentPetState();
     r.stateText = growth.stateText(r.state);
+    pushPetState();             // 阶段 8：桌面阿七跟着做反应（吃东西/喝水/开心）
   }
   return r;
 });
 
 ipcMain.on('aqi:close-growth', () => closeGrowthWindow());
+
+// ===== 阶段 8：宠物形象 / 点击菜单 / 位置记忆 =====
+ipcMain.handle('aqi:get-pet-state', () => {
+  try { return currentPetState(); } catch (_) { return 'IDLE'; }
+});
+ipcMain.on('aqi:toggle-menu', () => toggleMenu());
+ipcMain.on('aqi:open-menu', () => showMenu());
+ipcMain.on('aqi:close-menu', () => hideMenu());
+ipcMain.on('aqi:menu-action', (e, act) => handleMenuAction(act));
+ipcMain.on('aqi:save-position', () => saveMainPosition());
 
 // ===== 阶段 6：提醒气泡 =====
 ipcMain.on('aqi:hide-bubble', () => hideBubble());
@@ -740,6 +937,7 @@ if (!gotLock) {
     createWindow();
     createTray();
     startReminderTimer();   // 阶段 6：健康提醒定时检查（每 60 秒）
+    startPetStateTimer();   // 阶段 8：推送宠物状态（驱动桌宠表情/动作）
     // 阶段 4：第二天提醒 —— 仅当存在待处理异常（忘记上工 / 忘记下工）时才弹出补录窗口。
     // 没有任何异常时不打扰用户；随时也可从托盘「🩹 补录 / 修正考勤」手动打开。
     const pending = findPendingRepairs(getAppRoot());

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>阿七菜单</title>
+  <link rel="stylesheet" href="menu.css" />
+</head>
+<body>
+  <!-- 点击阿七弹出的功能菜单（规格 §34 + 设计板）。
+       独立无边框小窗：不扩大已验收的桌宠主窗口（180×200），避免透明区挡住办公。 -->
+  <div class="menu" id="menu">
+    <div class="m-head">
+      <span class="m-avatar">🐱</span>
+      <span class="m-name" id="m-name">阿七</span>
+      <span class="m-lv" id="m-lv">Lv.1</span>
+    </div>
+    <div class="m-exp">
+      <div class="exp-track"><div class="exp-fill" id="m-expfill"></div></div>
+      <span class="exp-label" id="m-exptext">0.0 / 80</span>
+    </div>
+    <div class="m-state" id="m-state">🔴 休息中</div>
+
+    <div class="m-list">
+      <button class="m-item primary" id="m-punch">🟢 上工</button>
+      <button class="m-item" data-act="records">📝 工作记录</button>
+      <button class="m-item" data-act="todo">📋 今日待办</button>
+      <button class="m-item" data-act="stats">📊 工作统计</button>
+      <button class="m-item" data-act="growth">❤️ 互动</button>
+      <button class="m-item" data-act="status">🎒 宠物状态</button>
+      <button class="m-item" data-act="settings">⚙ 设置</button>
+      <button class="m-item subtle" data-act="hide">🙈 隐藏阿七</button>
+    </div>
+  </div>
+  <script src="menu-window.js"></script>
+</body>
+</html>

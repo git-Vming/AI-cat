@@ -7,103 +7,92 @@ html, body {
   overflow: hidden;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   user-select: none;
-  /* 阶段 2 二次复查：窗口整体保持可交互（默认），不依赖 CSS 命中切换，
-     避免透明区吞掉 mouseup/mousemove 导致“看着能点其实丢了事件”。
-     代价：窗口四周约 15~25px 透明留白会拦一下桌面点击（非验收项，已与 PM 对齐）。 */
 }
 
-/* 宠物本体：正常可交互元素（不挂 -webkit-app-region 拖拽区，
-   否则 OS 会吃掉 mouseup/click，导致“单击弹卡”失效）。
-   拖动改由 app.js 在 JS 里用 setPosition 实现，并区分“拖动/单击”。 */
+/* ===== 阿七本体 =====
+   拖动/点击都由 app.js 用 pointer 事件在 JS 里实现（不挂 -webkit-app-region，
+   否则 OS 会把区域当非客户区、吞掉 mouseup/click，导致"能拖不能点"）。 */
 .pet {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   width: 150px;
-  height: 150px;
-  background-image: url('../assets/pet/placeholder-cat.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
+  height: 169px;
   cursor: grab;
-  transition: transform 0.15s ease;
-  touch-action: none;            /* 禁止浏览器默认手势，事件全交给我们处理 */
+  transition: transform 0.15s ease, opacity 0.16s ease;
+  touch-action: none;            /* 禁止浏览器默认手势，事件全交给我们 */
   -webkit-user-drag: none;       /* 禁止元素级拖拽（图片拖影） */
 }
+/* 隐藏/显示动画（规格 §35「可隐藏」+ 阶段 8「隐藏/显示动画」）：
+   淡出由渲染层 CSS 完成，主进程等过渡结束再真正 hide ——
+   不用窗口透明度 API，避免 transparent 窗口在各平台的差异。 */
+body.fade-out .pet { opacity: 0; transform: translate(-50%, -50%) scale(0.84); }
 .pet:active { cursor: grabbing; }
-.pet:hover { transform: translate(-50%, -50%) scale(1.05); }
+.pet:hover { transform: translate(-50%, -50%) scale(1.06); }
 
-/* 点击弹出的小卡片（阶段 2：含上工/下工 + 实时状态 + 经验条）
-   注意：窗口仅 200px 高，卡片贴底(bottom:5)且整体需 ≤ ~194px，否则会顶出窗口被裁切。
-   单击卡片非按钮区域即收起卡片、回到宠物界面（见 app.js）。 */
-.card {
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  transform: translateX(-50%);
-  width: 168px;
-  padding: 7px 10px;
-  background: rgba(24, 24, 28, 0.92);
-  color: #f2f2f2;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-  font-size: 12px;
-  line-height: 1.2;
-  text-align: center;
-  cursor: default;
-}
-.card.hidden { display: none; }
-.card-title { font-weight: 700; margin-bottom: 2px; }
-/* 经验条：紧贴标题下方；固定 expPerLevel(=80) EXP 升一级；已获得部分为绿色 */
-.card-exp { display: flex; align-items: center; gap: 6px; margin: 1px 0 5px; }
-.exp-track {
-  flex: 1;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.exp-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #5ee08a, #22c55e);   /* 已获得经验 = 绿色 */
-  transition: width 0.3s ease;
-}
-.exp-label { font-size: 10px; color: #9fd8b0; white-space: nowrap; }
-
-.card-state { font-weight: 600; margin-bottom: 4px; color: #ffd479; }
-
-.card-stats { color: #d6d6dc; margin-bottom: 5px; line-height: 1.35; font-size: 11px; text-align: left; }
-.card-stats:empty { display: none; }
-.card-stats b { color: #ffffff; }
-.card-btn {
+.pet svg.aqi-pet {
+  display: block;
   width: 100%;
-  padding: 4px 0;
-  margin-top: 3px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 92%;     /* 以"脚"为轴心做呼吸/摇摆，更像活物 */
+  filter: drop-shadow(0 5px 6px rgba(0, 0, 0, 0.35));
+  animation: aqi-breathe 3.4s ease-in-out infinite;
 }
-.card-btn.primary { background: #ff9f43; color: #1b1b1f; }
-.card-btn.primary:hover { background: #ffb866; }
-.card-btn.ghost {
-  background: transparent;
-  color: #b9b9c0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-}
-.card-btn.ghost:hover { background: rgba(255, 255, 255, 0.08); }
 
-.toast {
-  margin-top: 5px;
-  padding: 4px 6px;
-  font-size: 11px;
-  color: #1b1b1f;
-  background: #ffe08a;
-  border-radius: 6px;
-  animation: pop 0.2s ease;
+/* 待机 / 工作中：轻微呼吸 + 极缓慢上下浮动 */
+@keyframes aqi-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-3px) scale(1.025); }
 }
-.toast.hidden { display: none; }
-@keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* 工作中：比待机更"绷着"一点，轻微前后晃（像在敲键盘） */
+.pet svg[data-pose="work"] { animation: aqi-work 2.2s ease-in-out infinite; }
+@keyframes aqi-work {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-2px) rotate(-1.2deg); }
+  75%      { transform: translateY(-2px) rotate(1.2deg); }
+}
+
+/* 走动：左右摇摆 + 上下小幅跳动 */
+.pet svg[data-pose="walk"] { animation: aqi-walk 0.62s ease-in-out infinite; }
+@keyframes aqi-walk {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-4px) rotate(3deg); }
+}
+
+/* 睡觉：缓慢起伏（呼吸更深） */
+.pet svg[data-pose="sleep"] { animation: aqi-sleep 3.6s ease-in-out infinite; }
+@keyframes aqi-sleep {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(1px) scale(1.035, 0.975); }
+}
+
+/* 吃东西 / 喝水：小幅点头 */
+.pet svg[data-pose="eat"], .pet svg[data-pose="drink"] {
+  animation: aqi-nod 1.1s ease-in-out infinite;
+}
+@keyframes aqi-nod {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(4px) rotate(0deg); }
+}
+
+/* 升级：弹跳 + 闪光 */
+.pet svg[data-pose="levelup"] { animation: aqi-levelup 1.1s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes aqi-levelup {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.18) rotate(-2deg); }
+  60%  { transform: scale(0.96) rotate(2deg); }
+  100% { transform: scale(1); }
+}
+.pet svg[data-pose="levelup"] .spark { animation: aqi-spark 1.1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes aqi-spark {
+  0%, 100% { opacity: 0.35; transform: scale(0.75); }
+  50%      { opacity: 1; transform: scale(1.25); }
+}
+
+/* 降级/减少动画偏好：尊重系统设置 */
+@media (prefers-reduced-motion: reduce) {
+  .pet svg.aqi-pet { animation: none; }
+}

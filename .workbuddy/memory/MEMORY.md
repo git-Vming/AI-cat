@@ -19,6 +19,11 @@
 - **EXP 显示**：全保留 1 位小数、四舍五入（V-ming 2026-10-02）；等级内进度用 `exp`，当日结算所得用 `todayExp`，切勿混用。
 - **托盘经验条 = 只能文本近似，别再尝试自绘面板**（2026-10-03 返工教训）：Windows 原生托盘菜单**不能上色、不能画图形条**，故托盘里只能用 `█/░` 方块字符画 5 格近似条（`wt.expBarText(exp,need,5)`）。曾尝试"自绘托盘面板"以实现状态卡那样的绿色条，被 V-ming 以**改动量过大**为由否决并回退。将来若再遇到此需求，先说明该硬限制与代价，不要直接开工。
 - **辅助功能窗口用「普通窗口」（带系统标题栏）**，不自绘无边框面板（2026-10-04 定案，阶段4补录窗口）：普通窗口天然可关闭、改动量最小、不存在"关不掉"风险。代价是会在任务栏出现窗口项，可接受。
+- **桌宠形象 = SVG 矢量自绘**（2026-10-07 阶段8 定案，`src/pet-svg.js`）：设计板是**原创扁平黑猫**，网上无一致的 MIT/CC0 素材；AI 位图有"表情不一致/体积大/换图不连贯"问题。用参数化 SVG 画 **8 表情 × 7 姿态**，零外部素材依赖、可无限缩放、体积极小。
+- **点击阿七的菜单 = 独立无边框小窗**（`src/menu.html`，`focusable: false` 不抢焦点），**不扩大主窗口**：把菜单塞进主窗口会让窗口从 200 涨到 ~540，透明区成倍变大、明显挡住桌面（违反规格 §35）。主窗口只放本体，已验收的拖动/点击/气泡零回归。
+- **主进程只推"语义状态"**（复用 `growth.computeState`），表情/姿态映射放渲染层；且**只在状态真正变化时才重建 SVG**，避免每秒重建打断 CSS 动画。
+- **隐藏/显示动画用 CSS 过渡**（渲染层淡出 160ms → 主进程延迟 `hide()`），**不用窗口透明度 API**（`transparent:true` 窗口的 `setOpacity` 各平台表现不一）。
+- **桌面位置记忆**：`settings.json` 的 `position`。启动恢复到该坐标（做越界收敛，防跑出屏幕）；拖动结束由渲染层通知保存。
 
 ## 数据架构铁律（阶段4 确立，改动数据前必读）
 - **`attendance.json` 是唯一真相来源**；`statistics.json` 与 `pet.json` 一律由 `recomputeAll()` 从它**全量派生**，绝不做增量累加。原因：阶段4 允许"补录/修改历史记录"，增量累加会导致改记录减不掉、重算重复累加。`punchOut` 也走同一条路径。
@@ -56,15 +61,18 @@
 - 档位状态**只存内存**（程序重启后可能对同一档位再提醒一次，换取零数据污染）。
 - 托盘有勾选项「🔔 健康提醒」可随时开关；间隔调整界面留阶段 9。
 
-## 版本基线与回退（2026-10-04 确立，2026-10-05 重置）
+## 版本基线与回退（2026-10-04 确立，2026-10-07 最近滚动）
 - **每完成一个经 PM 审核通过的阶段 → 建立一份可回退基线**，双保险：
   1. Git 提交 + 打标签。仓库 remote = github.com/git-Vming/AI-cat，**未经 PM 同意不 push**。
   2. 物理快照目录 `D:\AI-cat\AI-cat\_snapshots\<名>_<日期>\`：含 `A-Qi/` 源码 + `文档/` + `校验清单.txt`(sha256) + `快照说明.md`(回退步骤)。
 - **快照只冻结「程序」，绝不包含用户数据**：排除 `node_modules/`、`data/*.json`、`WorkRecords/*`、`backup/*`、`diag.log`。回退后阿七仍带全部工作记录与等级。
-- **当前 V1.0 测试版（2026-10-05 PM 定义）= 标签 `v1.0-beta-3` = 快照 `_snapshots/V1.0-测试版_20261005/`**（阶段 0–6，55 文件 / 2.1MB / 校验 54/54 OK）。
-  旧快照（`v1.0-beta`=阶段0-4、`v1.0-beta-2`=阶段0-5）已归档到 `_snapshots/_历史版本/`。
+- **当前 V1.0 测试版（2026-10-07 滚动）= 快照 `_snapshots/V1.0-测试版_20261007/`**（阶段 0–7，61 文件 / 2.1MB / 校验 61/61 OK）。
+  Git 标签：`v1.0-beta-3`（阶段 0–6）。历史快照 `V1.0-测试版_20261005`(阶段0-6) / `V1.0-beta-2`(阶段0-5) / `V1.0-beta`(阶段0-4) 已归档到 `_snapshots/_历史版本/`。
 - **约定**：`_snapshots/` 下只保留"当前版本"一份非归档快照 + `_历史版本/`；每通过一个阶段就滚动一次。
-- 根 `.gitignore` 排除 `_snapshots/`、`node_modules/`、`diag.log`。
+- 根 `.gitignore` 排除 `_snapshots/`、`node_modules/`、`diag.log`、`_preview/`。
+- **【坑】sha256 校验清单不要用 `xargs`**：本机连接器状态注入的环境变量过多 → `xargs: environment is too large for exec`，
+  会静默生成**空的**校验清单（`OK=0 FAILED=0`，极难察觉）。改用
+  `find … | sort | while IFS= read -r f; do sha256sum "$f" | sed 's|^\./||'; done > 校验清单.txt`。
 
 ## 成长与互动（阶段7 确立）
 - **核心红线（结构性保证）**：**互动只加好感度，绝不产生 EXP**。`pet.totalExp` 仍只由 `attendance.json` 全量派生；
@@ -79,6 +87,10 @@
 - 【测试坑】想造某个等级**不能**手动改 `pet.totalExp` —— `recomputeAll` 会从 attendance 重新派生并覆盖；必须用真实工时记录堆出等级。
 
 ## 工程约定（踩过的坑，务必遵守）
+- **纯逻辑模块若要被渲染层直接 `<script>` 加载，用 UMD 头**（阶段8 `src/pet-svg.js` 的做法）：
+  `if (typeof module!=='undefined'&&module.exports) module.exports=api; if (typeof window!=='undefined') window.PetSvg=api;`
+  这样主进程能 `require` 单测、html 能直接加载同一份。**但窗口脚本仍必须单独命名**（`<name>-window.js`），
+  绝不把窗口逻辑塞进纯逻辑文件（阶段5 的 `todo.js` 覆盖事故）。
 - 工程目录：`D:\AI-cat\AI-cat\A-Qi\`（Electron 项目源码 + data/ + WorkRecords/ + assets/）。
 - 数据根目录：打包后取 exe 同目录；开发期取项目根目录。data/ 与 WorkRecords/ 必须独立于程序代码。
 - **渲染层禁用与 contextBridge 暴露名同名的 const/let**：preload 用 `exposeInMainWorld('aqi',…)` 注入的全局 `aqi` 是不可配置属性，`const aqi = window.aqi` 会抛 `SyntaxError: Identifier 'aqi' has already been declared`，**整份脚本不执行**（界面照常显示，极难察觉）。一律用 `const api = window.aqi`。`node --check` 查不出这类问题，必须跑 `scripts/test-renderer-load.js` / `test-repair-window.js` / `test-todo-window.js`。

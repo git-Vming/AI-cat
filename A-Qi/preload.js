@@ -34,6 +34,18 @@ contextBridge.exposeInMainWorld('aqi', {
   interact: (key) => ipcRenderer.invoke('aqi:interact', key),
   closeGrowth: () => ipcRenderer.send('aqi:close-growth'),
   onGrowthFocus: (cb) => ipcRenderer.on('aqi:growth-focus', (e, sec) => cb(sec)),
+  // 阶段 8：宠物形象 / 点击菜单 / 位置记忆
+  getPetState: () => ipcRenderer.invoke('aqi:get-pet-state'),
+  onPetState: (cb) => ipcRenderer.on('aqi:pet-state', (e, s) => cb(s)),
+  onLevelUp: (cb) => ipcRenderer.on('aqi:level-up', () => cb()),
+  toggleMenu: () => ipcRenderer.send('aqi:toggle-menu'),
+  openMenu: () => ipcRenderer.send('aqi:open-menu'),
+  closeMenu: () => ipcRenderer.send('aqi:close-menu'),
+  menuAction: (act) => ipcRenderer.send('aqi:menu-action', act),
+  onMenuHidden: (cb) => ipcRenderer.on('aqi:menu-hidden', () => cb()),
+  savePosition: () => ipcRenderer.send('aqi:save-position'),
+  // 隐藏/显示时的淡出淡入（由渲染层做 CSS 过渡，避开窗口透明度 API 的平台差异）
+  onWindowFade: (cb) => ipcRenderer.on('aqi:window-fade', (e, dir) => cb(dir)),
   // 诊断：渲染层日志上报 → 主进程写入 diag.log（PM 反馈：不再提供页内 DevTools 入口）
   log: (msg) => ipcRenderer.send('aqi:log', msg),
   platform: process.platform

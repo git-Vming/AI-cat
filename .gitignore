@@ -5,3 +5,6 @@ _snapshots/
 # 依赖与运行时产物
 node_modules/
 diag.log
+
+# 开发预览产物
+_preview/
