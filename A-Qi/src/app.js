@@ -1,11 +1,24 @@
-// 渲染层：阿七本体显示、拖动、点击开菜单、表情/动作切换（阶段 8）
+// 渲染层：阿七本体显示、拖动、点击开菜单、显隐淡入淡出
+//
+// 2026-10-07 改版（PM 指示）：
+//   阿七本体改为【直接使用原画贴图】assets/pet/aqi.png（透明底立绘）。
+//   本脚本**不再绘制、不再重绘、也不做任何表情/姿态映射与随机小动作** ——
+//   PM 明确要求"先就贴图，不写动态"，且"不可以自己修改形象原画"。
+//   原画 → 屏幕的链路只有一条：index.html 里的 <img src="../assets/pet/aqi.png">。
+//   等形象确认无误后，再单独讨论怎么让它动起来。
+//
+// 保留（这些是交互，不是"动态"）：
+//   · 拖动移动窗口 + 拖动结束记住位置（规格 §35）
+//   · 左键单击 / 右键 → 菜单；气泡显示中单击优先关气泡（阶段 6 决策）
+//   · 隐藏/显示淡出淡入（阶段 8）
+//   · 宠物状态仍照旧接收，但只写入 data-state 供调试与后续使用，不做视觉变化
 //
 // ⚠️ 关键教训（阶段 2 拖动/点击全失效的根因）：
 //   preload 用 contextBridge.exposeInMainWorld('aqi', …) 注入的全局 `aqi` 是「不可配置」属性；
 //   在本脚本顶层再写 `const aqi = window.aqi` 会触发
 //     SyntaxError: Identifier 'aqi' has already been declared
 //   语法错误会让【整份脚本直接不执行】——于是拖动、点击、托盘反馈全部失效
-//   （而阿七是 SVG/CSS 画的，照样显示，极具迷惑性）。
+//   （而图片照常显示，极具迷惑性）。
 //   因此本地引用统一改名为 `api`，绝不与全局名冲突。
 const pet = document.getElementById('pet');
 const api = window.aqi || null;   // ← 别名，勿改回 aqi
@@ -21,109 +34,23 @@ window.addEventListener('unhandledrejection', (e) => {
   const r = e.reason;
   log('UNHANDLED_REJECTION: ' + ((r && r.message) || String(r)));
 });
-log('renderer booted; aqi=' + (!!window.aqi) + '; pet=' + (!!pet) +
-    '; PetSvg=' + !!(window.PetSvg));
+log('renderer booted; aqi=' + (!!window.aqi) + '; pet=' + (!!pet));
 
-// ===== 宠物状态 → 表情/姿态 映射（纯表现层）=====
-// 状态由主进程 growth.computeState 判定后推来（IDLE/WORKING/HAPPY/SLEEP/…）。
-const STATE_LOOK = {
-  IDLE:      { expr: 'normal',   pose: 'sit' },
-  WORKING:   { expr: 'normal',   pose: 'work' },
-  HAPPY:     { expr: 'happy',    pose: 'sit' },
-  EATING:    { expr: 'happy',    pose: 'eat' },
-  DRINKING:  { expr: 'normal',   pose: 'drink' },
-  SLEEP:     { expr: 'sleepy',   pose: 'sleep' },
-  REMINDING: { expr: 'surprise', pose: 'sit' },
-  SAD:       { expr: 'sad',      pose: 'sit' },
-  WALK:      { expr: 'normal',   pose: 'walk' },
-  LEVELUP:   { expr: 'happy',    pose: 'levelup' }
-};
-
-// 工作状态下的随机行为（规格 §33：坐着/走动/看电脑/趴着/打哈欠/喝水/伸懒腰）
-// 权重刻意让"看电脑"占多数，偶尔穿插小动作，不影响工作计时。
-const WORK_ACTIONS = [
-  { expr: 'normal',   pose: 'work'  },
-  { expr: 'normal',   pose: 'work'  },
-  { expr: 'normal',   pose: 'work'  },
-  { expr: 'normal',   pose: 'sit'   },
-  { expr: 'normal',   pose: 'walk'  },
-  { expr: 'sleepy',   pose: 'sleep' },   // 打哈欠 / 趴一会儿
-  { expr: 'normal',   pose: 'drink' }    // 喝口水
-];
-
+// ===== 宠物状态（只记录，不做视觉变化）=====
+// 状态仍由主进程 growth.computeState 判定后推来（IDLE/WORKING/HAPPY/SLEEP/…）。
+// 当前形象是原画静态贴图，没有对应的各状态图，所以这里只把状态写进 DOM 属性，
+// 方便排查、也为"下一步让它动起来"预留挂载点。
 let curState = 'IDLE';
-let curLook = { expr: null, pose: null };
-let actionTimer = null;    // 随机动作回退计时
-let randomTimer = null;    // 下一次随机动作
-
-function applyLook(expr, pose) {
-  const e = window.PetSvg && window.PetSvg.isExpression(expr) ? expr : 'normal';
-  const p = window.PetSvg && window.PetSvg.isPose(pose) ? pose : 'sit';
-  if (curLook.expr === e && curLook.pose === p) return;
-  curLook = { expr: e, pose: p };
-  if (!pet || !window.PetSvg) return;
-  // 只在变化时重渲染，避免每秒重建 SVG 打断 CSS 动画
-  pet.innerHTML = window.PetSvg.petSvg({ expression: e, pose: p, size: 150 });
-  pet.dataset.anim = p;
-  log('look -> ' + e + '/' + p);
-}
-
-function clearTimers() {
-  if (actionTimer) { clearTimeout(actionTimer); actionTimer = null; }
-  if (randomTimer) { clearTimeout(randomTimer); randomTimer = null; }
-}
-
-// 待机时的偶发小动作（歪头 / 走两步 / 打个盹），让阿七"活着"而不是一张静止图
-const IDLE_ACTIONS = [
-  { expr: 'tilt',   pose: 'sit'  },
-  { expr: 'normal', pose: 'walk' },
-  { expr: 'sleepy', pose: 'sleep' }
-];
-
-// 安排随机小动作：
-//   工作中 —— 每 9~20 秒切一次（看电脑为主，穿插喝水/走动/打哈欠），4~7 秒后回到看电脑；
-//   待机中 —— 每 25~50 秒偶发一次，3~6 秒后回到坐姿。
-// 均只影响"长相"，不写任何数据，也就绝不影响工作计时（规格 §33）。
-function scheduleRandomAction() {
-  if (randomTimer) clearTimeout(randomTimer);
-  const working = curState === 'WORKING';
-  const idling = curState === 'IDLE';
-  if (!working && !idling) return;
-
-  const delay = working ? (9000 + Math.random() * 11000) : (25000 + Math.random() * 25000);
-  randomTimer = setTimeout(() => {
-    if (curState !== (working ? 'WORKING' : 'IDLE')) return;
-    const pool = working ? WORK_ACTIONS : IDLE_ACTIONS;
-    const a = pool[Math.floor(Math.random() * pool.length)];
-    applyLook(a.expr, a.pose);
-    const hold = working ? (4000 + Math.random() * 3000) : (3000 + Math.random() * 3000);
-    actionTimer = setTimeout(() => {
-      if (curState !== (working ? 'WORKING' : 'IDLE')) return;
-      const base = STATE_LOOK[curState] || STATE_LOOK.IDLE;
-      applyLook(base.expr, base.pose);
-      scheduleRandomAction();
-    }, hold);
-  }, delay);
-}
-
 function setState(state) {
-  const s = STATE_LOOK[state] ? state : 'IDLE';
+  const s = typeof state === 'string' && state ? state : 'IDLE';
   const changed = s !== curState;
   curState = s;
-  clearTimers();
-  const look = STATE_LOOK[s];
-  applyLook(look.expr, look.pose);
-  scheduleRandomAction();
+  if (pet) pet.dataset.state = s;
   if (changed) log('state -> ' + s);
 }
 
-function playLevelUp() {
-  // 升级：临时切到 levelup 姿态，播完回到当前状态
-  clearTimers();
-  applyLook('happy', 'levelup');
-  actionTimer = setTimeout(() => { curLook = { expr: null, pose: null }; setState(curState); }, 1400);
-}
-if (api && api.onLevelUp) api.onLevelUp(playLevelUp);
+// 升级通知：主进程侧本来就会弹升级气泡（announceLevelUp），这里只记录
+if (api && api.onLevelUp) api.onLevelUp(() => log('level up notified'));
 
 // ===== 交互：JS 拖动 + 单击判别（阶段 2 方案，保持不变）=====
 //  1) 拖动位移用「屏幕坐标」计算（screenX/screenY 与窗口自身位置无关，位移才准确）。
@@ -206,7 +133,7 @@ if (api && api.onWindowFade) {
   });
 }
 
-// 初始化：先画一只待机阿七（主进程随后会推真实状态）
-applyLook('normal', 'sit');
+// 初始化：仅记录状态（形象是静态贴图，无需绘制）
+if (pet) pet.dataset.state = curState;
 if (!api) log('window.aqi 桥未加载，交互将失效');
 else if (api.getPetState) api.getPetState().then((s) => setState(s)).catch(() => {});

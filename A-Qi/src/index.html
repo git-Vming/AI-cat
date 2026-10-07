@@ -6,12 +6,16 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- 阿七本体：SVG 由 app.js 依状态注入（pet-svg.js 绘制）。
+  <!-- 阿七本体：【直接使用原画贴图】assets/pet/aqi.png（透明底立绘）。
+       原画不走任何程序重绘 —— 程序只负责把它显示出来、拖动、点击、显隐。
        窗口保持 180×200 不变；点击弹出的菜单是【独立小窗】，
-       不在此窗口内展开，避免加大透明区域挡住桌面（规格 §35）。 -->
-  <div id="pet" class="pet" title="阿七"></div>
+       不在此窗口内展开，避免加大透明区域挡住桌面（规格 §35）。
 
-  <script src="pet-svg.js"></script>
+       2026-10-07 PM 指示：先"就贴图"，不写动态；形象正确写入后再考虑让它动起来。 -->
+  <div id="pet" class="pet" title="阿七">
+    <img class="pet-img" id="pet-img" src="../assets/pet/aqi.png" alt="阿七" draggable="false" />
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
