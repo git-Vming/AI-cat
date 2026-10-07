@@ -39,8 +39,11 @@ check('困倦 = 下垂闭眼弧（含下弯 Q 路径）',
 check('惊讶 = 更大的眼睛（ry=18）', /ry="18"/.test(p.petSvg({ expression: 'surprise' })));
 check('害羞 = 半睁眼 + 腮红', /ry="7.5"/.test(p.petSvg({ expression: 'shy' })) &&
   p.petSvg({ expression: 'shy' }).includes(p.palette.blush));
-check('生气 = 带怒眉（颜色为瞳孔色）',
-  p.petSvg({ expression: 'angry' }).includes(`stroke="${p.palette.pupil}" stroke-width="6"`));
+// 【2026-10-07 随形象升级调整】原断言写死「怒眉 = 瞳孔色」。
+//   但新形象身体改为近纯黑（#111214），瞳孔色（#0c0d10）画在黑脸上等于不可见，
+//   故怒眉改用强调色 iris。断言随之改为「高对比强调色」，其余表情断言未变。
+check('生气 = 带怒眉（用强调色，纯黑身体上可见）',
+  p.petSvg({ expression: 'angry' }).includes(`stroke="${p.palette.iris}" stroke-width="6"`));
 check('难过 = 带泪珠', p.petSvg({ expression: 'sad' }).includes(p.palette.water));
 check('歪头 = 头部整体旋转', /rotate\(-11 80 74\)/.test(p.petSvg({ expression: 'tilt' })));
 

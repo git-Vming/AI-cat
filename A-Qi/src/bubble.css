@@ -1,5 +1,7 @@
 /* 阶段 6：提醒气泡（独立无边框小窗，显示在阿七旁边）
-   尺寸由主进程固定为 216×76；尖角朝下，指向下方的阿七。 */
+   尺寸由主进程固定为 216×76；尖角朝下，指向下方的阿七。
+   2026-10-07 UI 换肤：深色气泡 → 设计板同款浅色气泡（阿七是黑猫，浅色气泡更像漫画对白框）。
+   只改配色与圆角，尺寸 / padding / 字号保持原值。 */
 * { box-sizing: border-box; }
 
 html, body {
@@ -21,10 +23,10 @@ html, body {
   right: 0;
   bottom: 12px;              /* 底部留 12px 给尖角 */
   padding: 8px 11px;
-  background: rgba(28, 28, 34, 0.96);
-  color: #f4f4f7;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  background: #ffffff;
+  color: #252a33;
+  border: 1px solid #dfe8f5;
+  border-radius: 14px;
   font-size: 12px;
   line-height: 1.5;
   display: flex;
@@ -32,10 +34,10 @@ html, body {
   justify-content: center;
   text-align: center;
   word-break: break-all;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 20px rgba(37, 42, 51, 0.20);
 }
 
-/* 朝下的尖角 → 指向下方的阿七 */
+/* 朝下的尖角 → 指向下方的阿七（颜色与气泡底色一致） */
 .bubble::after {
   content: '';
   position: absolute;
@@ -44,5 +46,5 @@ html, body {
   transform: translateX(-50%);
   border-left: 7px solid transparent;
   border-right: 7px solid transparent;
-  border-top: 7px solid rgba(28, 28, 34, 0.96);
+  border-top: 7px solid #ffffff;
 }

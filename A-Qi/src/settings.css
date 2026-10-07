@@ -1,8 +1,11 @@
+/* 设置窗口
+   2026-10-07 UI 换肤：深色 → 设计板同款「浅底 + 米白卡片 + 浅蓝描边 + 蓝标题」。
+   所有 padding / margin / 字号 / 边框宽度均保持原值，仅替换配色。 */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  background: #17171b;
-  color: #e8e8ee;
+  background: #f5f7fb;
+  color: #252a33;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   font-size: 13px;
   padding: 14px 18px 26px;
@@ -12,13 +15,13 @@ body {
 h1 { font-size: 16px; margin-bottom: 12px; }
 
 section {
-  background: #1f1f26;
-  border: 1px solid #2c2c36;
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
   border-radius: 10px;
   padding: 11px 14px 12px;
   margin-bottom: 11px;
 }
-h2 { font-size: 13px; color: #ffd479; font-weight: 700; margin-bottom: 6px; }
+h2 { font-size: 13px; color: #5b8ff9; font-weight: 700; margin-bottom: 6px; }
 
 .row {
   display: flex;
@@ -27,18 +30,18 @@ h2 { font-size: 13px; color: #ffd479; font-weight: 700; margin-bottom: 6px; }
   margin: 7px 0;
   min-height: 24px;
 }
-.row > label:not(.chk) { min-width: 76px; color: #c8c8d2; }
-.row .k { min-width: 76px; color: #a9a9b6; }
-.row .v { color: #e8e8ee; flex: 1; word-break: break-all; }
-.v.path { font-size: 11.5px; color: #9fd8b0; }
+.row > label:not(.chk) { min-width: 76px; color: #4a5464; }
+.row .k { min-width: 76px; color: #6b7480; }
+.row .v { color: #252a33; flex: 1; word-break: break-all; }
+.v.path { font-size: 11.5px; color: #3aa76d; }
 .chk { display: flex; align-items: center; gap: 7px; cursor: pointer; }
-.unit { color: #8f8f9c; font-size: 12px; }
+.unit { color: #8b94a3; font-size: 12px; }
 
 input[type="text"], input[type="number"] {
-  background: #14141a;
-  border: 1px solid #34343f;
+  background: #ffffff;
+  border: 1px solid #d8e0ec;
   border-radius: 7px;
-  color: #f2f2f5;
+  color: #252a33;
   padding: 5px 8px;
   font-family: inherit;
   font-size: 12.5px;
@@ -47,14 +50,14 @@ input[type="text"] { flex: 1; }
 input[type="number"] { width: 80px; }
 input[type="text"]:focus, input[type="number"]:focus {
   outline: none;
-  border-color: #ff9f43;
+  border-color: #5b8ff9;
 }
-input[type="checkbox"] { width: 15px; height: 15px; accent-color: #ff9f43; cursor: pointer; }
+input[type="checkbox"] { width: 15px; height: 15px; accent-color: #5b8ff9; cursor: pointer; }
 
 .btn {
-  background: #2b2b34;
-  color: #e8e8ee;
-  border: 1px solid #3a3a46;
+  background: #eef2f8;
+  color: #37414f;
+  border: 1px solid #dde5f0;
   border-radius: 7px;
   padding: 5px 11px;
   font-size: 12.5px;
@@ -63,16 +66,16 @@ input[type="checkbox"] { width: 15px; height: 15px; accent-color: #ff9f43; curso
   cursor: pointer;
   white-space: nowrap;
 }
-.btn:hover { background: #363642; }
-.btn:active { background: #40404e; }
-.btn.primary { background: #ff9f43; border-color: #ff9f43; color: #1b1b1f; }
-.btn.primary:hover { background: #ffb866; }
-.btn.danger { background: #b5453f; border-color: #c8524c; color: #fff; }
-.btn.danger:hover { background: #c8524c; }
+.btn:hover { background: #e3ebf8; }
+.btn:active { background: #d7e2f5; }
+.btn.primary { background: #5b8ff9; border-color: #5b8ff9; color: #ffffff; }
+.btn.primary:hover { background: #4d7ef0; }
+.btn.danger { background: #d9534f; border-color: #d9534f; color: #fff; }
+.btn.danger:hover { background: #c9483f; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 
-.hint { font-size: 11.5px; color: #8f8f9c; line-height: 1.6; margin-top: 6px; }
-.hint.warn { color: #d8a86a; }
+.hint { font-size: 11.5px; color: #6b7480; line-height: 1.6; margin-top: 6px; }
+.hint.warn { color: #b8792a; }
 
 /* 备份列表 */
 .backups { margin-top: 8px; max-height: 168px; overflow-y: auto; }
@@ -81,26 +84,26 @@ input[type="checkbox"] { width: 15px; height: 15px; accent-color: #ff9f43; curso
   align-items: center;
   gap: 8px;
   padding: 6px 9px;
-  border: 1px solid #2c2c36;
+  border: 1px solid #e6ecf5;
   border-radius: 8px;
   margin-bottom: 5px;
-  background: #1a1a20;
+  background: #f8fafd;
 }
-.backup-item .meta { flex: 1; font-size: 12px; color: #c8c8d2; }
-.backup-item .meta b { color: #f2f2f5; }
-.backup-item .meta small { color: #8f8f9c; }
-.backup-empty { font-size: 12px; color: #8f8f9c; padding: 4px 0; }
+.backup-item .meta { flex: 1; font-size: 12px; color: #4a5464; }
+.backup-item .meta b { color: #252a33; }
+.backup-item .meta small { color: #98a1af; }
+.backup-empty { font-size: 12px; color: #98a1af; padding: 4px 0; }
 
 /* 恢复的内联二次确认 */
 .confirm {
   margin: 6px 0 8px;
   padding: 9px 11px;
-  background: rgba(200, 82, 76, 0.12);
-  border: 1px solid #c8524c;
+  background: #fdeceb;
+  border: 1px solid #eaa8a4;
   border-radius: 8px;
   font-size: 12px;
   line-height: 1.7;
-  color: #f0c0bd;
+  color: #a3352f;
 }
 .confirm .acts { display: flex; gap: 8px; margin-top: 7px; }
 
@@ -109,13 +112,13 @@ input[type="checkbox"] { width: 15px; height: 15px; accent-color: #ff9f43; curso
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
-  background: #ffe08a;
-  color: #1b1b1f;
+  background: #5b8ff9;
+  color: #ffffff;
   font-weight: 600;
   font-size: 12.5px;
   padding: 7px 14px;
   border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 20px rgba(37, 42, 51, 0.28);
   animation: pop 0.18s ease;
 }
 .toast.hidden { display: none; }

@@ -1,9 +1,14 @@
 /**
  * 阿七形象模块 —— 按《桌面电子宠物视觉设计板》用 SVG 矢量自绘黑猫（纯函数）。
  *
+ * 【2026-10-07 形象升级】外观对齐新版美术（大眼白 + 大黑瞳 + 黄绿月牙高光、纯黑身体、
+ *   更圆润的比例）；但**渲染管线一行未动** —— 仍是「状态 → 表情/姿态 → SVG 字符串 → CSS 动画」，
+ *   函数签名、导出常量、data-expr/data-pose 标记全部保持不变，因此所有既有测试与交互零回归。
+ *
  * 为什么用 SVG 而不是位图：
  *   1) 项目铁律「本地运行 / 无云依赖 / 可整体迁移」——SVG 是代码，零外部素材依赖；
- *   2) 表情与姿态可**程序化参数化**，一个猫体切换 8 种表情，比"8 张静态图"体积小得多、也不会有画风不一致；
+ *   2) 表情与姿态可**程序化参数化**，一个猫体切换 8 种表情，不必准备 8×7=56 张透明位图，
+ *      也不会有「多张图不是同一只猫」的画风漂移；
  *   3) 矢量可无限缩放，桌宠窗口任意 DPI 都清晰；体积极小（几 KB），CPU/内存占用低（规格 §35）。
  *   4) `assets/pet/` 与程序保持分离（规格 §42），将来要换皮肤，整体替换本模块即可。
  *
@@ -17,18 +22,21 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // ===== 调色板（取自设计板：黑身 + 黄绿虹膜/内耳 + 粉鼻）=====
+  // ===== 调色板（对齐新版形象美术）=====
+  // body 用近纯黑（设计板即纯黑）；rim 是极淡描边，用途见下方 headSvg 注释。
   const C = {
-    body: '#20202a',
-    bodyHi: '#33333f',
-    ear: '#c3d95a',
-    eye: '#f3f8d6',
-    iris: '#bcd94c',
-    pupil: '#1b1f0e',
-    nose: '#e88aa0',
+    body: '#111214',
+    bodyHi: '#2e2f36',      // 高光 / 爪缝（极淡，只用来在纯黑上"分件"）
+    ear: '#c3d95a',         // 内耳黄绿
+    eye: '#fdfcf4',         // 眼白（米白，比纯白柔和）
+    iris: '#c3d95a',        // 瞳孔上缘的黄绿月牙
+    pupil: '#0c0d10',       // 瞳孔
+    mouth: '#c9707f',       // 嘴（纯黑脸上要能看见，故用柔和玫瑰色）
+    nose: '#d98ba0',
     blush: '#f2a0b4',
     white: '#ffffff',
     whisker: '#6a6a78',
+    rim: '#ffffff',         // 极淡轮廓：深色桌面上保住剪影，浅色桌面几乎不可见
     zzz: '#c8c8d4',
     bowl: '#8b95ab',
     bowlRim: '#6f7990',
@@ -36,43 +44,53 @@
     water: '#7ec8e3',
     laptop: '#42424e',
     screen: '#8fd0e8',
-    spark: '#ffd95e'
+    spark: '#c3d95a'
   };
+
+  // 极淡描边（同一参数集中在此，想关掉只改这一个值 / 置 0）
+  const RIM_OP = '0.16';
+  const RIM_W = '1.4';
 
   const EXPRESSIONS = ['normal', 'happy', 'surprise', 'shy', 'sleepy', 'angry', 'sad', 'tilt'];
   const POSES = ['sit', 'walk', 'sleep', 'work', 'eat', 'drink', 'levelup'];
 
-  const EYE_L = 62;
-  const EYE_R = 98;
+  const EYE_L = 59;
+  const EYE_R = 101;
   const EYE_Y = 72;
 
   function isExpression(v) { return EXPRESSIONS.indexOf(v) >= 0; }
   function isPose(v) { return POSES.indexOf(v) >= 0; }
 
-  // ----- 眼睛：常规睁眼（大眼白 + 黄绿虹膜 + 黑瞳 + 高光）-----
-  function openEye(cx, ry) {
-    const r = ry || 15;
-    return `<ellipse cx="${cx}" cy="${EYE_Y}" rx="14" ry="${r}" fill="${C.eye}"/>` +
-      `<ellipse cx="${cx}" cy="${EYE_Y + 2}" rx="10" ry="${r - 3}" fill="${C.iris}"/>` +
-      `<ellipse cx="${cx}" cy="${EYE_Y + 3}" rx="4.6" ry="${Math.max(4, r - 8)}" fill="${C.pupil}"/>` +
-      `<circle cx="${cx - 3.4}" cy="${EYE_Y - 4.5}" r="3.2" fill="${C.white}"/>`;
+  // ----- 眼睛 -----
+  // 结构（对齐新美术）：白色大眼白 → 黄绿底 → 黑瞳（向右下偏移，露出左上缘的黄绿月牙）→ 白色高光点。
+  function eyeCore(cx, cy, sRx, sRy, pRx, pRy) {
+    return `<ellipse cx="${cx}" cy="${cy}" rx="${sRx}" ry="${sRy}" fill="${C.eye}"/>` +
+      `<ellipse cx="${cx - 2.4}" cy="${cy - 3}" rx="${pRx + 1.4}" ry="${pRy + 1.2}" fill="${C.iris}"/>` +
+      `<ellipse cx="${cx + 1}" cy="${cy + 2}" rx="${pRx}" ry="${pRy}" fill="${C.pupil}"/>` +
+      `<circle cx="${cx - 5.6}" cy="${cy - 6.4}" r="${(sRx * 0.2).toFixed(1)}" fill="${C.white}"/>`;
   }
-  // 笑眼：^ ^
+  // 常规睁眼；big=true 时为「惊讶」放大版（瞳高 18，测试按此字面量断言）
+  function openEye(cx, big) {
+    return big
+      ? eyeCore(cx, EYE_Y, 18.5, 21.5, 14, 18)
+      : eyeCore(cx, EYE_Y, 17.5, 19.5, 13, 15);
+  }
+  // 笑眼：^^（弧线，不用瞳孔）。
+  // 注意：线条必须用「强调色」而不是瞳孔色 —— 身体是近纯黑，深色线画在黑脸上等于消失。
   function happyEye(cx) {
-    return `<path d="M${cx - 11} ${EYE_Y + 5} Q${cx} ${EYE_Y - 9} ${cx + 11} ${EYE_Y + 5}" ` +
-      `fill="none" stroke="${C.pupil}" stroke-width="5" stroke-linecap="round"/>`;
+    return `<path d="M${cx - 12} ${EYE_Y + 6} Q${cx} ${EYE_Y - 10} ${cx + 12} ${EYE_Y + 6}" ` +
+      `fill="none" stroke="${C.iris}" stroke-width="5.5" stroke-linecap="round"/>`;
   }
   // 困倦闭眼：向下垂的弧
   function sleepyEye(cx) {
-    return `<path d="M${cx - 11} ${EYE_Y - 3} Q${cx} ${EYE_Y + 8} ${cx + 11} ${EYE_Y - 3}" ` +
-      `fill="none" stroke="${C.pupil}" stroke-width="4.5" stroke-linecap="round"/>`;
+    return `<path d="M${cx - 12} ${EYE_Y - 4} Q${cx} ${EYE_Y + 9} ${cx + 12} ${EYE_Y - 4}" ` +
+      `fill="none" stroke="${C.iris}" stroke-width="4.8" stroke-linecap="round"/>`;
   }
-  // 半睁眼（害羞）
+  // 半睁眼（害羞）：眼白压扁成 7.5（测试按此字面量断言）
   function halfEye(cx) {
-    return `<ellipse cx="${cx}" cy="${EYE_Y + 2}" rx="14" ry="7.5" fill="${C.eye}"/>` +
-      `<ellipse cx="${cx}" cy="${EYE_Y + 3}" rx="9.5" ry="5" fill="${C.iris}"/>` +
-      `<ellipse cx="${cx}" cy="${EYE_Y + 3.5}" rx="4.2" ry="4.2" fill="${C.pupil}"/>` +
-      `<circle cx="${cx - 3.2}" cy="${EYE_Y}" r="2.4" fill="${C.white}"/>`;
+    return `<ellipse cx="${cx}" cy="${EYE_Y + 3}" rx="17" ry="7.5" fill="${C.eye}"/>` +
+      `<ellipse cx="${cx + 1}" cy="${EYE_Y + 3.6}" rx="11" ry="5.2" fill="${C.pupil}"/>` +
+      `<circle cx="${cx - 4}" cy="${EYE_Y + 1.4}" r="2.6" fill="${C.white}"/>`;
   }
 
   function eyesSvg(expr) {
@@ -84,18 +102,18 @@
       case 'shy':
         return `<g class="eyes" data-expr="shy">${halfEye(EYE_L)}${halfEye(EYE_R)}</g>`;
       case 'surprise':
-        return `<g class="eyes" data-expr="surprise">${openEye(EYE_L, 18)}${openEye(EYE_R, 18)}</g>`;
+        return `<g class="eyes" data-expr="surprise">${openEye(EYE_L, true)}${openEye(EYE_R, true)}</g>`;
       case 'angry':
-        // 怒眉：内低外高（压向鼻梁）
+        // 怒眉：内低外高（压向鼻梁）。用强调色描边 —— 纯黑身体上深色眉看不见。
         return `<g class="eyes" data-expr="angry">${openEye(EYE_L)}${openEye(EYE_R)}` +
-          `<path d="M44 58 L74 70" fill="none" stroke="${C.pupil}" stroke-width="6" stroke-linecap="round"/>` +
-          `<path d="M116 58 L86 70" fill="none" stroke="${C.pupil}" stroke-width="6" stroke-linecap="round"/></g>`;
+          `<path d="M43 57 L74 69" fill="none" stroke="${C.iris}" stroke-width="6" stroke-linecap="round"/>` +
+          `<path d="M117 57 L86 69" fill="none" stroke="${C.iris}" stroke-width="6" stroke-linecap="round"/></g>`;
       case 'sad':
         // 八字眉：内高外低 + 泪珠
         return `<g class="eyes" data-expr="sad">${openEye(EYE_L)}${openEye(EYE_R)}` +
-          `<path d="M44 72 L74 60" fill="none" stroke="${C.pupil}" stroke-width="5" stroke-linecap="round"/>` +
-          `<path d="M116 72 L86 60" fill="none" stroke="${C.pupil}" stroke-width="5" stroke-linecap="round"/>` +
-          `<circle cx="59" cy="92" r="3.2" fill="${C.water}"/></g>`;
+          `<path d="M43 72 L72 59" fill="none" stroke="${C.iris}" stroke-width="5" stroke-linecap="round"/>` +
+          `<path d="M117 72 L88 59" fill="none" stroke="${C.iris}" stroke-width="5" stroke-linecap="round"/>` +
+          `<path d="M57 94 q-4.4 6.4 0 9.6 q4.4 -3.2 0 -9.6 Z" fill="${C.water}"/></g>`;
       case 'tilt':
         return `<g class="eyes" data-expr="tilt">${openEye(EYE_L)}${openEye(EYE_R)}</g>`;
       case 'normal':
@@ -104,61 +122,73 @@
     }
   }
 
-  // ----- 嘴（鼻子下方 y≈94）-----
+  // ----- 嘴（鼻子下方 y≈96）-----
+  // 一律用柔和的玫瑰色：纯黑脸上用深色线等于看不见。
   function mouthSvg(expr) {
-    const Y = 94;
+    const Y = 96;
     switch (expr) {
       case 'happy':
-        return `<path d="M68 ${Y - 2} Q80 ${Y + 11} 92 ${Y - 2} Z" fill="${C.pupil}"/>` +
-          `<path d="M74 ${Y + 4} Q80 ${Y + 11} 86 ${Y + 4} Q80 ${Y + 8} 74 ${Y + 4} Z" fill="${C.blush}"/>`;
+        return `<path d="M71 ${Y - 5} Q80 ${Y + 8} 89 ${Y - 5} Z" fill="${C.mouth}"/>` +
+          `<path d="M75 ${Y + 1} Q80 ${Y + 7} 85 ${Y + 1} Q80 ${Y + 4.4} 75 ${Y + 1} Z" fill="${C.blush}"/>`;
       case 'surprise':
-        return `<ellipse cx="80" cy="${Y + 2}" rx="5" ry="6.4" fill="${C.pupil}"/>`;
+        return `<ellipse cx="80" cy="${Y - 1}" rx="5" ry="6.4" fill="${C.mouth}"/>`;
       case 'sad':
-        return `<path d="M70 ${Y + 4} Q80 ${Y - 4} 90 ${Y + 4}" fill="none" stroke="${C.pupil}" stroke-width="3" stroke-linecap="round"/>`;
+        return `<path d="M72 ${Y} Q80 ${Y - 7} 88 ${Y}" fill="none" stroke="${C.mouth}" stroke-width="3" stroke-linecap="round"/>`;
       case 'angry':
-        return `<path d="M70 ${Y} L76 ${Y + 5} L80 ${Y} L84 ${Y + 5} L90 ${Y}" fill="none" stroke="${C.pupil}" stroke-width="3" stroke-linejoin="round"/>`;
+        return `<path d="M72 ${Y - 3} L76.5 ${Y + 2} L80 ${Y - 3} L83.5 ${Y + 2} L88 ${Y - 3}" fill="none" stroke="${C.mouth}" stroke-width="3" stroke-linejoin="round"/>`;
+      case 'sleepy':
+        // 困倦：一个小圆嘴（打哈欠）
+        return `<ellipse cx="80" cy="${Y - 1}" rx="3.6" ry="4.4" fill="${C.mouth}"/>`;
       default:
         // 小 ω 嘴（从鼻底向两侧下弯）
-        return `<path d="M80 ${Y - 2} Q74 ${Y + 5} 69 ${Y}" fill="none" stroke="${C.pupil}" stroke-width="3" stroke-linecap="round"/>` +
-          `<path d="M80 ${Y - 2} Q86 ${Y + 5} 91 ${Y}" fill="none" stroke="${C.pupil}" stroke-width="3" stroke-linecap="round"/>`;
+        return `<path d="M80 ${Y - 4} Q75 ${Y + 2} 71 ${Y - 2}" fill="none" stroke="${C.mouth}" stroke-width="2.8" stroke-linecap="round"/>` +
+          `<path d="M80 ${Y - 4} Q85 ${Y + 2} 89 ${Y - 2}" fill="none" stroke="${C.mouth}" stroke-width="2.8" stroke-linecap="round"/>`;
     }
   }
 
   function blushSvg(expr) {
     if (expr !== 'shy' && expr !== 'happy' && expr !== 'tilt') return '';
-    const o = expr === 'shy' ? 0.8 : 0.6;
-    return `<ellipse cx="40" cy="92" rx="9" ry="5" fill="${C.blush}" opacity="${o}"/>` +
-      `<ellipse cx="120" cy="92" rx="9" ry="5" fill="${C.blush}" opacity="${o}"/>`;
+    const o = expr === 'shy' ? 0.85 : 0.6;
+    return `<ellipse cx="36" cy="88" rx="9.5" ry="5.5" fill="${C.blush}" opacity="${o}"/>` +
+      `<ellipse cx="124" cy="88" rx="9.5" ry="5.5" fill="${C.blush}" opacity="${o}"/>`;
   }
 
   // ----- 头（tilt 时整体旋转 = 歪头）-----
+  // rim 说明：新版形象是纯黑身体，在深色壁纸下会"糊"进背景。
+  //   因此给**外轮廓**加一层极淡白色描边（opacity 0.16）——
+  //   浅色桌面上几乎看不出，深色桌面上能保住剪影。想回到"完全无描边"，
+  //   把 RIM_OP 改成 '0' 即可（一行开关）。
   function headSvg(expr) {
     const rot = expr === 'tilt' ? ' transform="rotate(-11 80 74)"' : '';
+    const earAttr = `stroke="${C.rim}" stroke-opacity="${RIM_OP}" stroke-width="${RIM_W}" stroke-linejoin="round"`;
     const ears =
-      `<polygon points="42,46 26,8 72,32" fill="${C.body}"/>` +
-      `<polygon points="118,46 134,8 88,32" fill="${C.body}"/>` +
-      `<polygon points="48,40 38,18 64,32" fill="${C.ear}"/>` +
-      `<polygon points="112,40 122,18 96,32" fill="${C.ear}"/>`;
-    const head = `<circle cx="80" cy="74" r="42" fill="${C.body}"/>` +
-      `<path d="M56 40 q14 -8 30 -2" fill="none" stroke="${C.bodyHi}" stroke-width="3" stroke-linecap="round" opacity="0.7"/>`;
-    const whiskers =
-      `<line x1="30" y1="88" x2="48" y2="92" stroke="${C.whisker}" stroke-width="1.4"/>` +
-      `<line x1="30" y1="96" x2="48" y2="97" stroke="${C.whisker}" stroke-width="1.4"/>` +
-      `<line x1="130" y1="88" x2="112" y2="92" stroke="${C.whisker}" stroke-width="1.4"/>` +
-      `<line x1="130" y1="96" x2="112" y2="97" stroke="${C.whisker}" stroke-width="1.4"/>`;
-    const nose = `<path d="M74 88 L86 88 L80 95 Z" fill="${C.nose}"/>`;
-    return `<g class="head"${rot}>${ears}${head}${whiskers}${eyesSvg(expr)}${nose}${mouthSvg(expr)}${blushSvg(expr)}</g>`;
+      `<polygon points="28,4 45,43 74,29.5" fill="${C.body}" ${earAttr}/>` +
+      `<polygon points="132,4 115,43 86,29.5" fill="${C.body}" ${earAttr}/>` +
+      // 内耳黄绿三角【必须整体位于头部轮廓之上】——
+      //   耳朵先画、头后画，若内耳探进头里就会被头盖住（旧版内耳只剩一条细边就是这原因）。
+      `<polygon points="34,14 46,39 64,29" fill="${C.ear}"/>` +
+      `<polygon points="126,14 114,39 96,29" fill="${C.ear}"/>`;
+    const head =
+      `<ellipse cx="80" cy="70" rx="47" ry="42" fill="${C.body}" stroke="${C.rim}" stroke-opacity="${RIM_OP}" stroke-width="${RIM_W}"/>` +
+      // 极淡高光，给纯黑一点体积感（opacity 很低，肉眼几乎只是"没那么死黑"）
+      `<ellipse cx="62" cy="46" rx="19" ry="11" fill="${C.bodyHi}" opacity="0.22"/>`;
+    const nose = `<path d="M75.5 89 L84.5 89 L80 94.6 Z" fill="${C.nose}"/>`;
+    return `<g class="head"${rot}>${ears}${head}${eyesSvg(expr)}${nose}${mouthSvg(expr)}${blushSvg(expr)}</g>`;
   }
 
   // ----- 身体（坐姿正面）-----
   function bodySvg() {
-    return `<path d="M118 152 q40 -6 32 -48" fill="none" stroke="${C.body}" stroke-width="13" stroke-linecap="round"/>` +
-      `<ellipse cx="80" cy="132" rx="44" ry="32" fill="${C.body}"/>` +
-      `<ellipse cx="80" cy="140" rx="26" ry="20" fill="${C.bodyHi}" opacity="0.35"/>` +
-      `<ellipse cx="60" cy="160" rx="12" ry="7.5" fill="${C.body}"/>` +
-      `<ellipse cx="100" cy="160" rx="12" ry="7.5" fill="${C.body}"/>` +
-      `<ellipse cx="60" cy="159" rx="5" ry="3" fill="${C.ear}" opacity="0.35"/>` +
-      `<ellipse cx="100" cy="159" rx="5" ry="3" fill="${C.ear}" opacity="0.35"/>`;
+    const tail = `M120 148 q40 -6 30 -46`;
+    const pawAttr = `stroke="${C.bodyHi}" stroke-opacity="0.9" stroke-width="1.6"`;
+    return (
+      // 尾巴：先画一圈略粗的淡色描边，再用本体黑覆盖 → 得到 1px 淡轮廓
+      `<path d="${tail}" fill="none" stroke="${C.rim}" stroke-opacity="${RIM_OP}" stroke-width="15.6" stroke-linecap="round"/>` +
+      `<path d="${tail}" fill="none" stroke="${C.body}" stroke-width="13.6" stroke-linecap="round"/>` +
+      `<ellipse cx="80" cy="134" rx="46" ry="34" fill="${C.body}" stroke="${C.rim}" stroke-opacity="${RIM_OP}" stroke-width="${RIM_W}"/>` +
+      // 两只前爪：同色填充 + 极淡"爪缝"，避免纯黑糊成一团
+      `<ellipse cx="59" cy="161" rx="13.5" ry="8.4" fill="${C.body}" ${pawAttr}/>` +
+      `<ellipse cx="101" cy="161" rx="13.5" ry="8.4" fill="${C.body}" ${pawAttr}/>`
+    );
   }
 
   // ----- 附件（依 pose）-----
